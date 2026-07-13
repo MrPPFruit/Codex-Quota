@@ -1,4 +1,4 @@
-param([string]$Version = "0.2.0-preview.2")
+param([string]$Version = "0.2.0-preview.3")
 $ErrorActionPreference = "Stop"
 if ($Version -notmatch '^0\.2\.0-preview\.[0-9]+$') { throw "非法 Windows Preview 版本: $Version" }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
@@ -22,7 +22,7 @@ if ($productVersion -ne $Version) { throw "二进制产品版本不一致: $prod
 $notice = Join-Path $publish "README-Windows.txt"
 @"
 Codex Quota $Version for Windows 11 x64
-完整解压到固定目录后运行 CodexQuota.exe。此 Preview 未使用商业代码签名证书，SmartScreen 可能显示警告。程序只在官方 Codex 运行时显示额度气泡，托盘菜单可隐藏、关闭登录启动或退出。
+完整解压到固定目录后运行 CodexQuota.exe。此 Preview 未使用商业代码签名证书，SmartScreen 可能显示警告。程序在包含 Codex 的官方 ChatGPT 桌面应用运行时显示额度气泡，托盘菜单可隐藏、关闭登录启动或退出。
 "@ | Set-Content $notice -Encoding UTF8
 $archiveName = "Codex-Quota-v$Version-windows-x64.zip"
 $archive = Join-Path $release $archiveName

@@ -11,15 +11,25 @@ namespace CodexQuota.App;
 
 internal sealed record CodexExecutableCandidate(string Path, string Signer);
 
-internal sealed class WindowsCodexExecutableLocator(BoundedDiagnosticLog diagnostics)
+internal sealed class WindowsCodexExecutableLocator
 {
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(3);
+    private readonly BoundedDiagnosticLog _diagnostics;
+    private readonly Func<CancellationToken, Process[]> _findOfficial;
+
+    internal WindowsCodexExecutableLocator(
+        BoundedDiagnosticLog diagnostics,
+        Func<CancellationToken, Process[]>? findOfficial = null)
+    {
+        _diagnostics = diagnostics;
+        _findOfficial = findOfficial ?? WindowsCodexPackageProcesses.FindOfficial;
+    }
 
     public async Task<CodexExecutableCandidate?> LocateAsync(CancellationToken cancellationToken)
     {
         if (!TryGetRunningCodexIdentity(cancellationToken, out var expectedThumbprint, out var packageRoot, out var identityFailure))
         {
-            diagnostics.Write("locator", identityFailure);
+            _diagnostics.Write("locator", identityFailure);
             return null;
         }
 
@@ -37,12 +47,12 @@ internal sealed class WindowsCodexExecutableLocator(BoundedDiagnosticLog diagnos
 
             if (await SupportsAppServerAsync(candidate, cancellationToken).ConfigureAwait(false))
             {
-                diagnostics.Write("locator", $"Trusted OpenAI helper accepted ({signer})");
+                _diagnostics.Write("locator", $"Trusted OpenAI helper accepted ({signer})");
                 return new CodexExecutableCandidate(candidate, signer);
             }
         }
 
-        diagnostics.Write("locator", "No trusted OpenAI helper available");
+        _diagnostics.Write("locator", "No trusted OpenAI helper available");
         return null;
     }
 
@@ -55,7 +65,7 @@ internal sealed class WindowsCodexExecutableLocator(BoundedDiagnosticLog diagnos
         thumbprint = string.Empty;
         packageRoot = string.Empty;
         failure = "Official OpenAI desktop package process unavailable";
-        var processes = WindowsCodexPackageProcesses.FindOfficial(cancellationToken);
+        var processes = _findOfficial(cancellationToken);
         try
         {
             if (processes.Length == 0) return false;

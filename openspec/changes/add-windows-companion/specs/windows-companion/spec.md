@@ -20,7 +20,7 @@
 - **THEN** 系统仅保留低开销托盘与生命周期检测，不显示额度气泡也不启动 app-server
 
 ### Requirement: Codex 可执行文件发现与信任 Gate
-系统 MUST 只从运行中的官方 Codex MSIX 包身份和少量明确的每用户 Codex helper 根目录推导候选。系统 MUST 拒绝任意 PATH 猜测、相对路径、reparse point、超出允许根目录的文件及未通过真实性检查的候选；没有候选通过时 SHALL 安全降级为不可用，且 MUST NOT 读取、复制或保存 Codex 认证文件。
+系统 MUST 只从运行中的官方 MSIX 包身份和该进程对应的系统保护 WindowsApps 包根推导固定 helper 候选。系统 MUST 拒绝任意 PATH 猜测、用户可写 mirror、递归搜索、相对路径、reparse point、超出允许根目录的文件及未通过真实性检查的候选；没有候选通过时 SHALL 安全降级为不可用，且 MUST NOT 读取、复制或保存 Codex 认证文件。
 
 #### Scenario: 可信 helper 可用
 - **WHEN** 官方 Codex 包正在运行，候选位于允许的 canonical 根目录、无 reparse point、Authenticode 验证有效且在总 deadline 内通过 app-server capability probe
@@ -32,7 +32,7 @@
 
 #### Scenario: 多个可信候选
 - **WHEN** 多个候选均通过真实性与能力检查
-- **THEN** 系统使用确定性的优先级选择官方每用户 mirror 中与当前 Codex 包匹配的候选，不按文件更新时间或递归扫描结果猜测
+- **THEN** 系统使用确定性的优先级选择官方 WindowsApps 包根内与当前宿主签名匹配的固定候选，不按文件更新时间或递归扫描结果猜测
 
 ### Requirement: Windows 额度协议语义
 系统 SHALL 通过 JSONL stdio 执行 `initialize → initialized → account/rateLimits/read`，识别 300 分钟与 10080 分钟窗口，并把 `usedPercent` 转换为剩余百分比。系统 MUST 支持稀疏 `account/rateLimits/updated`、完整刷新、断线不可用、有界退避重连、有限数字校验和 1 MiB 单帧上限。

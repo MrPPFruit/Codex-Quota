@@ -9,9 +9,17 @@ namespace CodexQuota.App;
 
 internal static class WindowsCodexPackageProcesses
 {
+    internal delegate bool PackageFamilyReader(int processId, out string? familyName);
+
     internal static IReadOnlyList<string> DiscoveryNames { get; } = Array.AsReadOnly(new[] { "Codex", "ChatGPT" });
 
-    internal static Process[] FindOfficial(CancellationToken cancellationToken)
+    internal static Process[] FindOfficial(CancellationToken cancellationToken) =>
+        FindOfficial(cancellationToken, Process.GetProcessesByName, TryGetPackageFamilyName);
+
+    internal static Process[] FindOfficial(
+        CancellationToken cancellationToken,
+        Func<string, Process[]> findByName,
+        PackageFamilyReader readPackageFamily)
     {
         var candidates = new Dictionary<int, Process>();
         var official = new List<Process>();
@@ -20,7 +28,7 @@ internal static class WindowsCodexPackageProcesses
             foreach (var name in DiscoveryNames)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                foreach (var process in Process.GetProcessesByName(name))
+                foreach (var process in findByName(name))
                 {
                     int processId;
                     try
@@ -43,7 +51,7 @@ internal static class WindowsCodexPackageProcesses
             foreach (var entry in candidates.ToArray())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!TryGetPackageFamilyName(entry.Key, out var familyName) ||
+                if (!readPackageFamily(entry.Key, out var familyName) ||
                     !CodexPackagePolicy.IsOfficial(familyName))
                 {
                     entry.Value.Dispose();

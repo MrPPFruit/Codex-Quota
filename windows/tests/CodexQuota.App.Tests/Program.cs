@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Globalization;
+using System.Diagnostics;
 using System.IO;
 
 var tests = new (string Name, Action Body)[]
@@ -15,6 +16,9 @@ var tests = new (string Name, Action Body)[]
     ("收起与展开表面结构 smoke", OverlaySurfaceRendersExpectedGeometry),
     ("旋转色场覆盖完整展开表面", AuroraFieldCoversExpandedSurface),
     ("官方桌面宿主发现提示兼容迁移", OfficialHostDiscoveryNamesCoverMigration),
+    ("官方包发现按 PFN 过滤并清理句柄", OfficialPackageDiscoveryFiltersAndCleansUp),
+    ("presence 只转移选中进程所有权", PresenceTransfersOnlySelectedProcess),
+    ("locator 始终释放包进程候选", LocatorAlwaysDisposesPackageProcesses),
     ("未签名程序不通过 Authenticode", UnsignedExecutableIsRejected),
     ("构建目录不被注册为稳定启动路径", BuildDirectoryIsNotStable),
 };
@@ -121,6 +125,129 @@ static void OfficialHostDiscoveryNamesCoverMigration()
         "official desktop host migration aliases changed unexpectedly");
 }
 
+static void OfficialPackageDiscoveryFiltersAndCleansUp()
+{
+    var accepted = Process.GetProcessById(Environment.ProcessId);
+    var acceptedResult = WindowsCodexPackageProcesses.FindOfficial(
+        CancellationToken.None,
+        name => name == "ChatGPT" ? new[] { accepted } : Array.Empty<Process>(),
+        ReadOfficialFamily);
+    Assert(acceptedResult.Length == 1 && ReferenceEquals(acceptedResult[0], accepted),
+        "ChatGPT process with the exact official PFN was rejected");
+    Assert(!IsDisposed(accepted), "accepted process was disposed before ownership transfer");
+    acceptedResult[0].Dispose();
+
+    var rejected = Process.GetProcessById(Environment.ProcessId);
+    var rejectedResult = WindowsCodexPackageProcesses.FindOfficial(
+        CancellationToken.None,
+        name => name == "ChatGPT" ? new[] { rejected } : Array.Empty<Process>(),
+        ReadWrongFamily);
+    Assert(rejectedResult.Length == 0, "wrong PFN was accepted");
+    Assert(IsDisposed(rejected), "wrong-PFN process was not disposed");
+
+    var firstAlias = Process.GetProcessById(Environment.ProcessId);
+    var duplicateAlias = Process.GetProcessById(Environment.ProcessId);
+    var deduplicated = WindowsCodexPackageProcesses.FindOfficial(
+        CancellationToken.None,
+        name => name == "Codex" ? new[] { firstAlias } : new[] { duplicateAlias },
+        ReadOfficialFamily);
+    Assert(deduplicated.Length == 1 && ReferenceEquals(deduplicated[0], firstAlias),
+        "cross-alias PID was not deduplicated deterministically");
+    Assert(IsDisposed(duplicateAlias), "duplicate alias process was not disposed");
+    deduplicated[0].Dispose();
+
+    using var cancellation = new CancellationTokenSource();
+    var cancelled = Process.GetProcessById(Environment.ProcessId);
+    try
+    {
+        _ = WindowsCodexPackageProcesses.FindOfficial(
+            cancellation.Token,
+            name =>
+            {
+                if (name == "Codex") cancellation.Cancel();
+                return name == "Codex" ? new[] { cancelled } : Array.Empty<Process>();
+            },
+            ReadOfficialFamily);
+        throw new InvalidOperationException("cancelled discovery unexpectedly returned");
+    }
+    catch (OperationCanceledException)
+    {
+        Assert(IsDisposed(cancelled), "cancelled discovery leaked a process handle");
+    }
+
+    var faulted = Process.GetProcessById(Environment.ProcessId);
+    try
+    {
+        _ = WindowsCodexPackageProcesses.FindOfficial(
+            CancellationToken.None,
+            name => name == "Codex" ? new[] { faulted } : Array.Empty<Process>(),
+            ThrowingFamilyReader);
+        throw new InvalidOperationException("faulted discovery unexpectedly returned");
+    }
+    catch (IOException)
+    {
+        Assert(IsDisposed(faulted), "faulted discovery leaked a process handle");
+    }
+}
+
+static void PresenceTransfersOnlySelectedProcess()
+{
+    var selected = Process.GetProcessById(Environment.ProcessId);
+    var unselected = Process.GetProcessById(Environment.ProcessId);
+    var probe = new WindowsCodexProcessProbe(
+        new BoundedDiagnosticLog(),
+        _ => new[] { selected, unselected });
+    var observed = probe.FindRunningAsync(CancellationToken.None).AsTask().GetAwaiter().GetResult();
+    Assert(observed is not null, "presence did not return the selected process");
+    Assert(!IsDisposed(selected), "selected process was disposed before observer ownership");
+    Assert(IsDisposed(unselected), "unselected process was not disposed");
+    observed!.Dispose();
+    Assert(IsDisposed(selected), "observer did not dispose the selected process");
+}
+
+static void LocatorAlwaysDisposesPackageProcesses()
+{
+    var first = Process.GetProcessById(Environment.ProcessId);
+    var second = Process.GetProcessById(Environment.ProcessId);
+    var locator = new WindowsCodexExecutableLocator(
+        new BoundedDiagnosticLog(),
+        _ => new[] { first, second });
+    var result = locator.LocateAsync(CancellationToken.None).GetAwaiter().GetResult();
+    Assert(result is null, "unpackaged test process unexpectedly produced a helper");
+    Assert(IsDisposed(first) && IsDisposed(second), "locator leaked package process handles");
+}
+
+static bool ReadOfficialFamily(int _, out string? familyName)
+{
+    familyName = CodexPackagePolicy.OfficialFamilyName;
+    return true;
+}
+
+static bool ReadWrongFamily(int _, out string? familyName)
+{
+    familyName = "OpenAI.Codex_2p2nqsd0c76g0.fake";
+    return true;
+}
+
+static bool ThrowingFamilyReader(int _, out string? familyName)
+{
+    familyName = null;
+    throw new IOException("injected family reader failure");
+}
+
+static bool IsDisposed(Process process)
+{
+    try
+    {
+        _ = process.Handle;
+        return false;
+    }
+    catch (InvalidOperationException)
+    {
+        return true;
+    }
+}
+
 static void RenderAndValidate(
     UsageSnapshot snapshot,
     bool expanded,
@@ -165,6 +292,10 @@ static void RenderAndValidate(
             new System.Windows.Point(width - 12, 12),
             new System.Windows.Point(12, height - 12),
             new System.Windows.Point(width - 12, height - 12),
+            new System.Windows.Point(2, height / 2),
+            new System.Windows.Point(width - 2, height / 2),
+            new System.Windows.Point(width / 2, 2),
+            new System.Windows.Point(width / 2, height - 2),
         })
         {
             var pixelX = (int)Math.Round(point.X * dpi / 96);

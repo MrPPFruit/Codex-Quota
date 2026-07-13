@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.2.0-preview.3 - 2026-07-14
+
+- 兼容官方桌面应用从 Codex 迁移为 ChatGPT 后的 Windows 进程名变化，同时继续以精确 Package Family Name、WindowsApps 包根、签名和能力探针作为信任边界。
+- 修复展开态旋转色场被 WPF 父布局压缩后，在左右或对角区域露出白色底层的问题。
+- 增加不可用额度、5 个色流相位与 96/144 DPI 的 Windows runner 渲染回归。
+
 ## 0.2.0-preview.2 - 2026-07-14
 
 - Windows 气泡重构为系统 Desktop Acrylic、动态圆形窗口区域与 macOS 同构的内部彩色色场。

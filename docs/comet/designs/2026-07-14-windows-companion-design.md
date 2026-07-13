@@ -8,7 +8,7 @@ canonical_spec: openspec
 
 - `windows/CodexQuota.Windows.sln` 包含一个无框架 Core、一个 WPF App 和一个测试工程；不引入 MVVM/DI/日志/自动更新框架。
 - Core 使用 `System.Text.Json` 与 `Process` 实现协议，App 只通过 snapshot/event 接口消费，不解析 JSON。
-- Codex presence 绑定官方 MSIX package family；locator 只枚举固定每用户 mirror 候选，依次执行 canonical/reparse、WinVerifyTrust 和 capability probe，不使用 PATH。
+- Codex presence 以 `Codex` / `ChatGPT` 为发现提示并绑定精确官方 MSIX package family；locator 只枚举对应 WindowsApps 包根内的固定候选，依次执行 canonical/reparse、WinVerifyTrust、同证书指纹和 capability probe，不使用 PATH 或用户可写 mirror。
 - WPF HWND 使用 NOACTIVATE/TOOLWINDOW/MOUSEACTIVATE 原生策略；所有 Win32 像素在窗口边界转换为 DIP，布局纯函数可在 CI 测试。
 - 悬浮层视觉沿用单一自动适配彩色气泡。色场固定几何、相位单向旋转；窗口 180ms 形变与内容淡入淡出互斥，hover 使用 10 DIP 空间迟滞。
 - 首次从稳定路径运行时注册 HKCU Run；只管理自身 value，用户 opt-out 优先于首次启动策略。
@@ -16,14 +16,14 @@ canonical_spec: openspec
 
 ## 依赖与边界
 
-- 运行依赖 Windows 11 x64 与官方 Codex Desktop 登录态，不读取认证文件。
+- 运行依赖 Windows 11 x64 与包含 Codex 的官方 ChatGPT 桌面应用登录态，不读取认证文件。
 - 托盘复用 .NET 自带 WinForms NotifyIcon；仅使用必要 Win32 P/Invoke，不增加 Windows App SDK。
 - CI 依赖锁定 commit 的 checkout/setup-dotnet；Windows 资产只由 Windows runner 生成。
 - 真实 Store helper signer、SmartScreen、焦点、DPI 与多屏只能在用户 Windows 设备验证。
 
 ## 主要风险
 
-- Helper mirror 或签名不符合推断时必须不可用，不执行宽松回退；脱敏诊断用于下一 Preview 修正。
+- WindowsApps 包内 helper 相对路径或签名不符合推断时必须不可用，不执行宽松回退；脱敏诊断用于下一 Preview 修正。
 - WPF 透明合成可能在部分 GPU 上有性能/锯齿差异；循环色流只在可见且未减少动画时运行。
 - 单文件体积会大于原生 Rust，但换取零运行时安装与显著更低 UI/可访问性复杂度。
 - 未签名 EXE 会触发 SmartScreen；文档不得把 SHA-256 描述为身份认证。
