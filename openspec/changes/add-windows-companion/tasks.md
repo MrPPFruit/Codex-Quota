@@ -29,11 +29,11 @@
 - [x] 5.1 扩展 GitHub Actions 为独立 macOS 与 Windows job，并锁定第三方 Action 提交
 - [x] 5.2 增加 Windows Release publish 和 ZIP 脚本，验证测试、PE x64、版本、single-file、未签名状态、归档内容及 SHA-256
 - [x] 5.3 更新 README、CHANGELOG、Windows 安装/SmartScreen/升级/隐私说明和平台支持矩阵
-- [ ] 5.4 从干净提交在 Windows runner 生成候选并回下载复验资产
+- [x] 5.4 从干净提交在 Windows runner 生成候选并回下载复验资产
 
 ## 6. 审查与预发布
 
 - [x] 6.1 对 locator、进程所有权、注册表、诊断脱敏和未签名分发完成独立安全/架构复审
-- [ ] 6.2 保持 macOS Swift、Node、构建和签名回归通过，Windows Core/UI 状态测试全部通过
-- [ ] 6.3 使用 MrPPFruit 账号创建 `v0.2.0-preview.1` GitHub Prerelease，上传 Windows x64 ZIP 与 SHA-256 并验证线上资产
+- [x] 6.2 保持 macOS Swift、Node、构建和签名回归通过，Windows Core/UI 状态测试全部通过
+- [x] 6.3 使用 MrPPFruit 账号创建 `v0.2.0-preview.1` GitHub Prerelease，上传 Windows x64 ZIP 与 SHA-256 并验证线上资产
 - [ ] 6.4 在用户真实 Windows 11 x64 上完成 Store Codex locator、真实额度、焦点、hover/拖动、SmartScreen、DPI、登录启动和残留进程验收
