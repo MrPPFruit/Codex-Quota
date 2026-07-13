@@ -1,0 +1,14 @@
+workflow: full
+phase: build
+build_mode: direct
+isolation: branch
+verify_mode: null
+design_doc: docs/comet/designs/2026-07-14-windows-companion-design.md
+plan: null
+verify_result: pending
+verification_report: null
+branch_status: pending
+verified_at: null
+archived: false
+handoff_context: openspec/changes/add-windows-companion/.comet/handoff/design-context.json
+handoff_hash: daf49d2f461c7433f93e7507bbf97a7d69ca5e0e428dc1b76ed91ed618afd16f

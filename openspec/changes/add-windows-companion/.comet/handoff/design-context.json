@@ -1,0 +1,14 @@
+{
+  "change": "add-windows-companion",
+  "phase": "design",
+  "mode": "compact",
+  "canonical_spec": "openspec",
+  "generated_by": "comet-handoff.sh",
+  "context_hash": "daf49d2f461c7433f93e7507bbf97a7d69ca5e0e428dc1b76ed91ed618afd16f",
+  "files": [
+    { "path": "openspec/changes/add-windows-companion/proposal.md", "sha256": "ff14c99f0d9b9774c9fec932fb0ede6a6645c6b2dcfb94a4fbbd0dcc88cf734b" },
+    { "path": "openspec/changes/add-windows-companion/design.md", "sha256": "d3f34d146523092a0fb17cae937a66b80ed5faa65f74df070b9ad06beaf575ee" },
+    { "path": "openspec/changes/add-windows-companion/tasks.md", "sha256": "f3b9fb82c4ae8be7e419b913f2ab66b8a32b19afca5249df12d372c5d40d7d95" },
+    { "path": "openspec/changes/add-windows-companion/specs/windows-companion/spec.md", "sha256": "7a1b36d36a43cef1bc34890976bc67fae28adfc19ed46fcca3f8586f1d743079" }
+  ]
+}
