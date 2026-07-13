@@ -32,6 +32,9 @@ Expand-Archive $archive $verification
 if (!(Test-Path (Join-Path $verification "CodexQuota.exe"))) { throw "归档结构校验失败" }
 Remove-Item $verification -Recurse -Force
 $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-"$hash  $archiveName" | Set-Content "$archive.sha256" -Encoding ascii
+$checksum = "$archive.sha256"
+[IO.File]::WriteAllText($checksum, "$hash  $archiveName`n", [Text.UTF8Encoding]::new($false))
+$checksumBytes = [IO.File]::ReadAllBytes($checksum)
+if ($checksumBytes -contains 0x0d) { throw "SHA-256 文件必须使用 LF 行尾" }
 Write-Output $archive
-Write-Output "$archive.sha256"
+Write-Output $checksum
