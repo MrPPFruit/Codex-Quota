@@ -169,11 +169,11 @@ internal sealed class OverlaySurface : Grid
     {
         var stack = new StackPanel
         {
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+            VerticalAlignment = System.Windows.VerticalAlignment.Center,
         };
-        _collapsedValue.HorizontalAlignment = HorizontalAlignment.Center;
-        _collapsedLabel.HorizontalAlignment = HorizontalAlignment.Center;
+        _collapsedValue.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
+        _collapsedLabel.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
         _collapsedLabel.Foreground = new SolidColorBrush(Secondary);
         _collapsedLabel.Margin = new Thickness(0, -1, 0, 0);
         stack.Children.Add(_collapsedValue);
@@ -201,7 +201,7 @@ internal sealed class OverlaySurface : Grid
 
     private void AddRow(string title, TextBlock value, TextBlock resetDate, TextBlock resetTime, int row)
     {
-        var left = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        var left = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, VerticalAlignment = System.Windows.VerticalAlignment.Center };
         var titleText = MakeText(10, FontWeights.SemiBold);
         titleText.Text = title;
         titleText.Foreground = new SolidColorBrush(Primary);
@@ -211,13 +211,13 @@ internal sealed class OverlaySurface : Grid
 
         var right = new StackPanel
         {
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+            VerticalAlignment = System.Windows.VerticalAlignment.Center,
         };
         foreach (var text in new[] { resetDate, resetTime })
         {
             text.Foreground = new SolidColorBrush(Secondary);
-            text.HorizontalAlignment = HorizontalAlignment.Right;
+            text.HorizontalAlignment = System.Windows.HorizontalAlignment.Right;
             text.TextAlignment = TextAlignment.Right;
             right.Children.Add(text);
         }
