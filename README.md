@@ -67,7 +67,7 @@ artifacts/build/Codex Quota.app
 
 ### Windows 11 x64 Preview
 
-`v0.2.0-preview.1` 的 Windows ZIP 未使用商业代码签名证书，因此 SmartScreen 可能显示“Windows 已保护你的电脑”。请先核对 Release 中的 SHA-256，只从本项目官方 Release 下载；确认后可选择“更多信息 → 仍要运行”。这只适用于愿意测试公开源码构建的用户，不等同于已签名正式分发。
+`v0.2.0-preview.2` 的 Windows ZIP 未使用商业代码签名证书，因此 SmartScreen 可能显示“Windows 已保护你的电脑”。请先核对 Release 中的 SHA-256，只从本项目官方 Release 下载；确认后可选择“更多信息 → 仍要运行”。这只适用于愿意测试公开源码构建的用户，不等同于已签名正式分发。
 
 1. 完整解压 ZIP 到固定目录，例如 `%LOCALAPPDATA%\Programs\Codex Quota`。
 2. 运行一次 `CodexQuota.exe`；它会在托盘中常驻，并默认注册当前路径为用户级登录启动项。

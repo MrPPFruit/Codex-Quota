@@ -1,6 +1,6 @@
 # Windows 预览版分发说明
 
-Codex Quota `v0.2.0-preview.1` 的 Windows 资产面向 Windows 11 x64 测试。它由 GitHub Actions 的 Windows runner 从公开源码构建，采用 .NET 10 self-contained single-file WPF 发布，因此用户不需要另行安装 .NET Runtime。
+Codex Quota `v0.2.0-preview.2` 的 Windows 资产面向 Windows 11 x64 测试。它由 GitHub Actions 的 Windows runner 从公开源码构建，采用 .NET 10 self-contained single-file WPF 发布，因此用户不需要另行安装 .NET Runtime。该版本不会覆盖已发布的 `v0.2.0-preview.1`。
 
 ## 当前信任边界
 
@@ -25,9 +25,12 @@ GitHub Actions 能验证编译、测试、PE x64、single-file、未签名状态
 - Microsoft Store Codex 的 package identity 与 helper 路径；
 - 真实 5 小时和周额度；
 - 气泡不抢焦点、悬停展开、收缩和拖动；
+- Desktop Acrylic 能采样气泡后方桌面，圆形与展开圆角没有矩形底、黑角或明显锯齿；
 - 100%、不可用与周额度回退排版；
-- 100%、125%、150% DPI 与屏幕边缘；
+- 浅色、深色与高频壁纸背景；
+- 100%、125%、150%、200% DPI 与屏幕边缘；
+- Reduce Motion、动画期间 UI Automation 树与空闲色流 CPU；
 - Codex 启停、托盘退出和 app-server 子进程无残留；
 - SmartScreen 提示与登录启动开关。
 
-完成这轮验收前，Windows 资产保持 GitHub Prerelease，不宣称正式稳定版。
+Windows runner 生成的固定 PNG 只验证 WPF 内容尺寸、透明角、排版和无独立外圈，不能证明 DWM 桌面合成。完成上述实机验收前，Windows 资产保持 GitHub Prerelease，不宣称正式稳定版。

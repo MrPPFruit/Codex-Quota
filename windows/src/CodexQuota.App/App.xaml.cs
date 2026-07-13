@@ -30,7 +30,7 @@ public partial class App : System.Windows.Application
 
         _diagnostics = new BoundedDiagnosticLog();
         _diagnostics.Write("lifecycle", "Codex Quota 0.2.0 started");
-        _overlay = new OverlayWindow();
+        _overlay = new OverlayWindow(_diagnostics);
         try
         {
             using var preferences = Registry.CurrentUser.CreateSubKey(@"Software\CodexQuota", writable: false);

@@ -1,4 +1,4 @@
-param([string]$Version = "0.2.0-preview.1")
+param([string]$Version = "0.2.0-preview.2")
 $ErrorActionPreference = "Stop"
 if ($Version -notmatch '^0\.2\.0-preview\.[0-9]+$') { throw "非法 Windows Preview 版本: $Version" }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
