@@ -46,7 +46,7 @@
 
 ## 7. Windows 实机反馈修复
 
-- [ ] 7.1 以 `Codex` / `ChatGPT` 固定发现提示和精确官方 PFN 识别统一桌面宿主，probe 与 locator 复用候选枚举并保持既有签名/路径 Gate
-- [ ] 7.2 将 Aurora 色场固定为覆盖最大展开矩形任意旋转角的尺寸，验证收起/展开多个相位均无左右无色底层
-- [ ] 7.3 增加官方宿主迁移、错误 PFN、不可用额度与多相位渲染回归，并记录 CI 与真实 Windows 证据边界
+- [x] 7.1 以 `Codex` / `ChatGPT` 固定发现提示和精确官方 PFN 识别统一桌面宿主，probe 与 locator 复用候选枚举并保持既有签名/路径 Gate
+- [x] 7.2 将 Aurora 色场固定为覆盖最大展开矩形任意旋转角的尺寸，验证收起/展开多个相位均无左右无色底层
+- [x] 7.3 增加官方宿主迁移、错误 PFN、不可用额度与多相位渲染回归，并记录 CI 与真实 Windows 证据边界
 - [ ] 7.4 以 MrPPFruit 账号创建 `v0.2.0-preview.3` Prerelease，回下载校验 Windows ZIP、SHA-256 与 UI 截图
