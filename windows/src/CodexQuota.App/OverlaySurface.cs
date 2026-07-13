@@ -302,11 +302,10 @@ internal sealed class OverlaySurface : Grid
         var pixels = new byte[size * size * 4];
         var lights = new[]
         {
-            new AuroraLight(0.18, 0.20, 0.42, Color.FromRgb(46, 224, 255)),
-            new AuroraLight(0.82, 0.28, 0.46, Color.FromRgb(82, 122, 255)),
-            new AuroraLight(0.72, 0.82, 0.44, Color.FromRgb(184, 87, 255)),
-            new AuroraLight(0.20, 0.76, 0.43, Color.FromRgb(255, 97, 184)),
-            new AuroraLight(0.48, 0.48, 0.64, Color.FromRgb(232, 239, 255)),
+            new AuroraLight(0.18, 0.18, 0.30, Color.FromRgb(255, 97, 184)),
+            new AuroraLight(0.82, 0.18, 0.30, Color.FromRgb(46, 224, 255)),
+            new AuroraLight(0.80, 0.82, 0.32, Color.FromRgb(82, 122, 255)),
+            new AuroraLight(0.18, 0.80, 0.30, Color.FromRgb(184, 87, 255)),
         };
         for (var y = 0; y < size; y++)
         {
