@@ -47,7 +47,7 @@ WPF Window 使用 `WindowStyle=None`、`AllowsTransparency=False`、`ShowInTaskb
 
 几何仅由 180ms 窗口过渡驱动；内容先淡出后淡入并裁切在实时轮廓内。hover 保持区复用 macOS 已验证的“入口 frame ∪ 展开 frame + 10 DIP”，避免屏幕边缘振荡。循环色流固定中心和尺寸，只旋转颜色相位；Reduce Motion 时移除动画时钟。
 
-Windows 11 22621 及以上优先使用 DWM `DWMSBT_TRANSIENTWINDOW` 提供系统 Desktop Acrylic，并以 `SetWindowRgn` 按实时 DPI 把非 layered HWND 裁切为当前圆形或连续圆角矩形；内部 WPF 仅绘制与 macOS 同构的半透明白层、固定中心彩色色场和文字，不再绘制独立彩色描边、黑色实底或外发光。DWM 材质初始化失败时使用同一内容表面的不透明中性浅色降级，不回退到霓虹卡片视觉。
+Windows 11 22621 及以上优先使用 DWM `DWMSBT_TRANSIENTWINDOW` 提供系统 Desktop Acrylic，并以 `SetWindowRgn` 按实时 DPI 把非 layered HWND 裁切为当前圆形或连续圆角矩形；内部 WPF 仅绘制与 macOS 同构的半透明白层、固定中心的连续二维柔光色场和文字，不再绘制独立彩色描边、黑色实底或外发光。色场使用相互重叠的高斯柔光团生成，不使用会留下扇区分界的角向分段插值；动画只旋转固定尺寸色场，不随 hover 形变重新缩放。DWM 材质初始化失败时使用同一内容表面的不透明中性浅色降级，不回退到霓虹卡片视觉。
 
 为避免把离屏渲染误当作桌面合成证据，WPF 内容提取为无窗口依赖的 `OverlaySurface`。Windows runner 可在 STA 中固定额度、展开状态、色流相位和 Reduce Motion 后输出 52×52 与 130×78 PNG，用于验证尺寸、透明角、排版、语义色和无独立外圈；系统 Acrylic 的背景采样、窗口区域、非激活、拖动和动画只能由真实 Windows 11 桌面验证。
 

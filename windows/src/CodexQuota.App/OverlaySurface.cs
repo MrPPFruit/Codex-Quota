@@ -300,92 +300,54 @@ internal sealed class OverlaySurface : Grid
     {
         const int size = 256;
         var pixels = new byte[size * size * 4];
-        var colors = new[]
+        var lights = new[]
         {
-            Color.FromRgb(46, 224, 255),
-            Color.FromRgb(82, 122, 255),
-            Color.FromRgb(184, 87, 255),
-            Color.FromRgb(255, 97, 184),
-            Color.FromRgb(46, 224, 255),
+            new AuroraLight(0.18, 0.20, 0.42, Color.FromRgb(46, 224, 255)),
+            new AuroraLight(0.82, 0.28, 0.46, Color.FromRgb(82, 122, 255)),
+            new AuroraLight(0.72, 0.82, 0.44, Color.FromRgb(184, 87, 255)),
+            new AuroraLight(0.20, 0.76, 0.43, Color.FromRgb(255, 97, 184)),
+            new AuroraLight(0.48, 0.48, 0.64, Color.FromRgb(232, 239, 255)),
         };
         for (var y = 0; y < size; y++)
         {
             for (var x = 0; x < size; x++)
             {
-                var angle = (Math.Atan2(y - size / 2.0, x - size / 2.0) + Math.PI) / (2 * Math.PI);
-                var scaled = angle * 4;
-                var segment = Math.Min((int)scaled, 3);
-                var amount = scaled - segment;
-                var from = colors[segment];
-                var to = colors[segment + 1];
-                var radius = Math.Sqrt(Math.Pow(x - size / 2.0, 2) + Math.Pow(y - size / 2.0, 2)) / (size * 0.71);
-                var softness = 0.82 + 0.18 * Math.Min(radius, 1);
+                var normalizedX = x / (double)(size - 1);
+                var normalizedY = y / (double)(size - 1);
+                var totalWeight = 0.0;
+                var red = 0.0;
+                var green = 0.0;
+                var blue = 0.0;
+                foreach (var light in lights)
+                {
+                    var dx = normalizedX - light.X;
+                    var dy = normalizedY - light.Y;
+                    var distanceSquared = dx * dx + dy * dy;
+                    var weight = Math.Exp(-distanceSquared / (2 * light.Spread * light.Spread));
+                    totalWeight += weight;
+                    red += light.Color.R * weight;
+                    green += light.Color.G * weight;
+                    blue += light.Color.B * weight;
+                }
+
+                var edgeDistance = Math.Sqrt(
+                    Math.Pow(normalizedX - 0.5, 2) +
+                    Math.Pow(normalizedY - 0.5, 2));
+                var edgeLift = 0.94 + 0.06 * Math.Min(edgeDistance / 0.71, 1);
                 var offset = (y * size + x) * 4;
-                pixels[offset] = (byte)(Lerp(from.B, to.B, amount) * softness);
-                pixels[offset + 1] = (byte)(Lerp(from.G, to.G, amount) * softness);
-                pixels[offset + 2] = (byte)(Lerp(from.R, to.R, amount) * softness);
+                pixels[offset] = (byte)Math.Clamp(blue / totalWeight * edgeLift, 0, 255);
+                pixels[offset + 1] = (byte)Math.Clamp(green / totalWeight * edgeLift, 0, 255);
+                pixels[offset + 2] = (byte)Math.Clamp(red / totalWeight * edgeLift, 0, 255);
                 pixels[offset + 3] = 255;
             }
         }
-        pixels = BlurWrapped(pixels, size, radius: 18);
         var bitmap = new WriteableBitmap(size, size, 96, 96, PixelFormats.Bgra32, null);
         bitmap.WritePixels(new Int32Rect(0, 0, size, size), pixels, size * 4, 0);
         bitmap.Freeze();
         return bitmap;
     }
 
-    private static byte[] BlurWrapped(byte[] source, int size, int radius)
-    {
-        var horizontal = new byte[source.Length];
-        var output = new byte[source.Length];
-        BlurPass(source, horizontal, size, radius, horizontalPass: true);
-        BlurPass(horizontal, output, size, radius, horizontalPass: false);
-        return output;
-    }
-
-    private static void BlurPass(byte[] source, byte[] destination, int size, int radius, bool horizontalPass)
-    {
-        var count = radius * 2 + 1;
-        for (var line = 0; line < size; line++)
-        {
-            for (var channel = 0; channel < 3; channel++)
-            {
-                var sum = 0;
-                for (var offset = -radius; offset <= radius; offset++)
-                    sum += ReadChannel(source, size, line, Wrap(offset, size), channel, horizontalPass);
-
-                for (var position = 0; position < size; position++)
-                {
-                    WriteChannel(destination, size, line, position, channel, horizontalPass, (byte)(sum / count));
-                    var leaving = Wrap(position - radius, size);
-                    var entering = Wrap(position + radius + 1, size);
-                    sum -= ReadChannel(source, size, line, leaving, channel, horizontalPass);
-                    sum += ReadChannel(source, size, line, entering, channel, horizontalPass);
-                }
-            }
-
-            for (var position = 0; position < size; position++)
-                WriteChannel(destination, size, line, position, 3, horizontalPass, 255);
-        }
-    }
-
-    private static int ReadChannel(byte[] pixels, int size, int line, int position, int channel, bool horizontalPass)
-    {
-        var x = horizontalPass ? position : line;
-        var y = horizontalPass ? line : position;
-        return pixels[(y * size + x) * 4 + channel];
-    }
-
-    private static void WriteChannel(byte[] pixels, int size, int line, int position, int channel, bool horizontalPass, byte value)
-    {
-        var x = horizontalPass ? position : line;
-        var y = horizontalPass ? line : position;
-        pixels[(y * size + x) * 4 + channel] = value;
-    }
-
-    private static int Wrap(int value, int size) => (value % size + size) % size;
-
-    private static double Lerp(byte from, byte to, double amount) => from + (to - from) * amount;
+    private readonly record struct AuroraLight(double X, double Y, double Spread, Color Color);
 }
 
 internal readonly record struct CollapsedSurfacePresentation(string Label, double? RemainingPercent);
