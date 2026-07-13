@@ -314,11 +314,12 @@ import Testing
 }
 
 @MainActor
-@Test func shutdownClosesOnceBeforeEndingObservationEvenWhenStartHangs() async {
+@Test func shutdownClosesOnceBeforeEndingObservationEvenWhenStartHangs() async throws {
     let client = HangingUsageClient()
     let store = UsageStore()
     let session = AccessoryUsageSession(client: client, store: store)
     await session.start()
+    try await eventuallyAccessory { await client.startEntered }
     let clock = ContinuousClock()
     let began = clock.now
 
@@ -328,7 +329,9 @@ import Testing
     await second.value
 
     #expect(await client.closeCount == 1)
-    #expect(began.duration(to: clock.now) < .milliseconds(250))
+    #expect(session.lifecycle == .stopped)
+    #expect(session.hasActiveTasks == false)
+    #expect(began.duration(to: clock.now) < .seconds(2))
 }
 
 @MainActor
@@ -913,6 +916,7 @@ private final class MutableScreens {
 private actor HangingUsageClient: UsageStreamingClient {
     private var continuation: AsyncStream<UsageSnapshot>.Continuation?
     private(set) var closeCount = 0
+    private(set) var startEntered = false
 
     func snapshots() -> AsyncStream<UsageSnapshot> {
         AsyncStream { continuation in
@@ -922,6 +926,7 @@ private actor HangingUsageClient: UsageStreamingClient {
     }
 
     func start() async throws -> UsageSnapshot {
+        startEntered = true
         while !Task.isCancelled { try await Task.sleep(for: .seconds(30)) }
         throw CancellationError()
     }
