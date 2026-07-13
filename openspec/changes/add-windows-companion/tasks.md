@@ -42,4 +42,4 @@
 - [x] 6.3 使用 MrPPFruit 账号创建 `v0.2.0-preview.1` GitHub Prerelease，上传 Windows x64 ZIP 与 SHA-256 并验证线上资产
 - [ ] 6.4 在用户真实 Windows 11 x64 上完成 Store Codex locator、真实额度、焦点、hover/拖动、SmartScreen、DPI、登录启动和残留进程验收
 - [ ] 6.5 在真实 Windows 11 上完成 Acrylic 背景采样、圆形/圆角区域、浅色/深色/高频桌面背景、100%/125%/150%/200% DPI 与空闲动画 CPU 的视觉材质验收
-- [ ] 6.6 使用 MrPPFruit 账号创建 `v0.2.0-preview.2` Prerelease，并回下载校验新的 ZIP、SHA-256 与 UI 结构截图证据
+- [x] 6.6 使用 MrPPFruit 账号创建 `v0.2.0-preview.2` Prerelease，并回下载校验新的 ZIP、SHA-256 与 UI 结构截图证据
