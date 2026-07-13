@@ -2,7 +2,7 @@
 
 - [x] 1.1 创建 `windows/` 下的 .NET 10 WPF App、Core 与测试工程，固定 win-x64 self-contained single-file、trimming 关闭和 PerMonitorV2 manifest
 - [x] 1.2 提取语言无关额度与 JSON-RPC fixtures，并为 C# 实现覆盖 300/10080 窗口、稀疏 patch、非法字段、有限数字和 1 MiB 帧上限
-- [ ] 1.3 增加单实例、版本身份、最小脱敏诊断和 Windows 产品图标资源
+- [x] 1.3 增加单实例、版本身份、最小脱敏诊断和 Windows 产品图标资源
 
 ## 2. Codex 生命周期与协议
 

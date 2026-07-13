@@ -11,6 +11,7 @@ var tests = new (string Name, Action Body)[]
     ("剩余百分比限制在 0 到 100", PercentagesClamp),
     ("JSONL 支持分片和 CRLF", JsonLinesHandleFragments),
     ("JSONL 超限后清空并拒绝", JsonLineLimitFailsClosed),
+    ("诊断文本移除本机目录与换行", DiagnosticsAreRedacted),
 };
 
 var failures = new List<string>();
@@ -118,6 +119,19 @@ static void JsonLineLimitFailsClosed()
     Assert(failed, "oversized frame was accepted");
     var frames = framer.Append("{}\n"u8);
     AssertEqual(1, frames.Count, "framer did not recover after rejection");
+}
+
+static void DiagnosticsAreRedacted()
+{
+    var source = "C:\\Users\\Alice\\project\nC:\\Users\\Alice\\AppData\\Local\\OpenAI";
+    var result = DiagnosticRedactor.Sanitize(
+        source,
+        @"C:\Users\Alice",
+        @"C:\Users\Alice\AppData\Local",
+        @"C:\Users\Alice\AppData\Local\Temp");
+    Assert(!result.Contains("Alice", StringComparison.OrdinalIgnoreCase), "profile leaked");
+    Assert(!result.Contains('\n'), "newline leaked");
+    Assert(result.Contains("%USERPROFILE%", StringComparison.Ordinal), "profile marker missing");
 }
 
 static JsonDocument LoadFixture(string name)
