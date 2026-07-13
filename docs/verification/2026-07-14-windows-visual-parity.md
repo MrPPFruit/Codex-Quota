@@ -24,6 +24,13 @@ Windows 不再使用会留下扇区分界的角向分段位图。当前色场由
 - Windows runner 产物 `codex-quota-windows-ui-captures` 包含固定相位的 `collapsed.png` 与 `expanded.png`；截图验证透明角、表面满铺、文字安全区和无独立外圈。
 - 本地 `npm test` 27/27、`swift test` 138/138、`openspec validate add-windows-companion --strict` PASS。
 
+## 预发布产物
+
+- GitHub Prerelease：[v0.2.0-preview.2](https://github.com/MrPPFruit/Codex-Quota/releases/tag/v0.2.0-preview.2)。
+- Windows x64 ZIP SHA-256：`940d6d083410707ea37bb808a0aa1cc76cec93a7c6562fb357eeeca4b6a05661`。
+- Release 同时保留固定 WPF 收起/展开结构截图；截图不包含 DWM 桌面合成。
+- 发布后已重新下载 ZIP 与 `.sha256` 文件，并通过 `shasum -a 256 -c` 校验。
+
 ## 实机验收门
 
 下列项目必须由 Windows 11 22621 或更新版本的真实桌面完成，当前保持未通过状态：
