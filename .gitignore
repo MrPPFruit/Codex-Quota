@@ -1,0 +1,6 @@
+.build/
+.swiftpm/
+node_modules/
+artifacts/
+.DS_Store
+*.xcuserstate

@@ -1,0 +1,26 @@
+{
+  "name": "codex-quota",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A compact macOS quota companion for Codex.",
+  "type": "module",
+  "license": "MIT",
+  "author": "MrPPFruit",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MrPPFruit/Codex-Quota.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MrPPFruit/Codex-Quota/issues"
+  },
+  "homepage": "https://github.com/MrPPFruit/Codex-Quota#readme",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "build:accessory": "bash scripts/build-accessory-app.sh",
+    "smoke:accessory": "SMOKE_EXPECT_CODEX_PRESENCE=present bash scripts/run-accessory-smoke.sh && SMOKE_EXPECT_CODEX_PRESENCE=absent bash scripts/run-accessory-smoke.sh",
+    "verify:accessory": "npm run build:accessory && npm run smoke:accessory"
+  }
+}
