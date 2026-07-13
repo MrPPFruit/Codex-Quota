@@ -21,6 +21,7 @@ internal sealed class OverlaySurface : Grid
 
     private readonly Border _baseLayer = new();
     private readonly Border _colorLayer = new();
+    private readonly System.Windows.Controls.Image _colorImage = new();
     private readonly Grid _collapsed = new();
     private readonly Grid _expanded = new();
     private readonly TextBlock _collapsedValue = MakeText(17, FontWeights.Bold);
@@ -31,7 +32,7 @@ internal sealed class OverlaySurface : Grid
     private readonly TextBlock _weeklyValue = MakeText(14, FontWeights.Bold);
     private readonly TextBlock _weeklyResetDate = MakeText(9, FontWeights.Normal);
     private readonly TextBlock _weeklyResetTime = MakeText(9, FontWeights.Normal);
-    private readonly ImageBrush _auroraBrush;
+    private readonly RotateTransform _auroraRotation = new(0);
     private readonly CultureInfo _culture;
     private readonly TimeZoneInfo _timeZone;
     private int _contentTransitionGeneration;
@@ -46,22 +47,25 @@ internal sealed class OverlaySurface : Grid
         ClipToBounds = true;
         SnapsToDevicePixels = true;
 
-        _auroraBrush = new ImageBrush(AuroraTexture.Value)
+        _colorImage.Source = AuroraTexture.Value;
+        _colorImage.Width = 152;
+        _colorImage.Height = 152;
+        _colorImage.Stretch = Stretch.Fill;
+        _colorImage.Opacity = 0.60;
+        _colorImage.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
+        _colorImage.VerticalAlignment = System.Windows.VerticalAlignment.Center;
+        _colorImage.RenderTransformOrigin = new System.Windows.Point(0.5, 0.5);
+        _colorImage.RenderTransform = _auroraRotation;
+        _colorLayer.Child = _colorImage;
+        if (animateColorFlow && SystemParameters.ClientAreaAnimation)
         {
-            Stretch = Stretch.UniformToFill,
-            Opacity = 0.60,
-            RelativeTransform = new RotateTransform(0, 0.5, 0.5),
-        };
-        if (animateColorFlow && SystemParameters.ClientAreaAnimation && _auroraBrush.RelativeTransform is RotateTransform rotation)
-        {
-            rotation.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(0, 360, TimeSpan.FromSeconds(10))
+            _auroraRotation.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(0, 360, TimeSpan.FromSeconds(10))
             {
                 RepeatBehavior = RepeatBehavior.Forever,
             });
         }
 
         _baseLayer.Background = new SolidColorBrush(Color.FromArgb(178, 255, 255, 255));
-        _colorLayer.Background = _auroraBrush;
         ConfigureCollapsed();
         ConfigureExpanded();
         _expanded.Opacity = 0;
@@ -92,9 +96,8 @@ internal sealed class OverlaySurface : Grid
 
     internal void SetFlowAngle(double angle)
     {
-        if (_auroraBrush.RelativeTransform is not RotateTransform rotation) return;
-        rotation.BeginAnimation(RotateTransform.AngleProperty, null);
-        rotation.Angle = angle;
+        _auroraRotation.BeginAnimation(RotateTransform.AngleProperty, null);
+        _auroraRotation.Angle = angle;
     }
 
     internal void SetExpanded(bool expanded, bool animate)
