@@ -324,11 +324,63 @@ internal sealed class OverlaySurface : Grid
                 pixels[offset + 3] = 255;
             }
         }
+        pixels = BlurWrapped(pixels, size, radius: 18);
         var bitmap = new WriteableBitmap(size, size, 96, 96, PixelFormats.Bgra32, null);
         bitmap.WritePixels(new Int32Rect(0, 0, size, size), pixels, size * 4, 0);
         bitmap.Freeze();
         return bitmap;
     }
+
+    private static byte[] BlurWrapped(byte[] source, int size, int radius)
+    {
+        var horizontal = new byte[source.Length];
+        var output = new byte[source.Length];
+        BlurPass(source, horizontal, size, radius, horizontalPass: true);
+        BlurPass(horizontal, output, size, radius, horizontalPass: false);
+        return output;
+    }
+
+    private static void BlurPass(byte[] source, byte[] destination, int size, int radius, bool horizontalPass)
+    {
+        var count = radius * 2 + 1;
+        for (var line = 0; line < size; line++)
+        {
+            for (var channel = 0; channel < 3; channel++)
+            {
+                var sum = 0;
+                for (var offset = -radius; offset <= radius; offset++)
+                    sum += ReadChannel(source, size, line, Wrap(offset, size), channel, horizontalPass);
+
+                for (var position = 0; position < size; position++)
+                {
+                    WriteChannel(destination, size, line, position, channel, horizontalPass, (byte)(sum / count));
+                    var leaving = Wrap(position - radius, size);
+                    var entering = Wrap(position + radius + 1, size);
+                    sum -= ReadChannel(source, size, line, leaving, channel, horizontalPass);
+                    sum += ReadChannel(source, size, line, entering, channel, horizontalPass);
+                }
+            }
+
+            for (var position = 0; position < size; position++)
+                WriteChannel(destination, size, line, position, 3, horizontalPass, 255);
+        }
+    }
+
+    private static int ReadChannel(byte[] pixels, int size, int line, int position, int channel, bool horizontalPass)
+    {
+        var x = horizontalPass ? position : line;
+        var y = horizontalPass ? line : position;
+        return pixels[(y * size + x) * 4 + channel];
+    }
+
+    private static void WriteChannel(byte[] pixels, int size, int line, int position, int channel, bool horizontalPass, byte value)
+    {
+        var x = horizontalPass ? position : line;
+        var y = horizontalPass ? line : position;
+        pixels[(y * size + x) * 4 + channel] = value;
+    }
+
+    private static int Wrap(int value, int size) => (value % size + size) % size;
 
     private static double Lerp(byte from, byte to, double amount) => from + (to - from) * amount;
 }
