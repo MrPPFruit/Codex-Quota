@@ -3,12 +3,9 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
-using System.Windows.Media;
 using System.Windows.Media.Animation;
-using System.Windows.Shapes;
 using System.Windows.Threading;
 using CodexQuota.Core;
 using Microsoft.Win32;
@@ -21,79 +18,35 @@ internal sealed class OverlayWindow : Window
     private const double CollapsedHeight = 52;
     private const double ExpandedWidth = 130;
     private const double ExpandedHeight = 78;
-    private readonly Grid _root = new();
-    private readonly Grid _collapsed = new();
-    private readonly Grid _expanded = new();
-    private readonly TextBlock _collapsedValue = MakeText(14, FontWeights.SemiBold);
-    private readonly TextBlock _fiveHourValue = MakeText(12, FontWeights.SemiBold);
-    private readonly TextBlock _fiveHourReset = MakeText(8.5, FontWeights.Normal);
-    private readonly TextBlock _weeklyValue = MakeText(12, FontWeights.SemiBold);
-    private readonly TextBlock _weeklyReset = MakeText(8.5, FontWeights.Normal);
-    private readonly Border _surface;
+    private readonly OverlaySurface _surface = new();
+    private readonly WindowsBackdrop _backdrop = new();
     private readonly DispatcherTimer _leaveTimer;
+    private readonly BoundedDiagnosticLog? _diagnostics;
     private bool _expandedState;
     private bool _programmaticMove;
     private Rect? _entryScreenBounds;
     private int _animationGeneration;
+    private bool _regionReady;
+    private bool _closed;
+    private bool _nativeReady;
+    private string? _lastRegionFailure;
+    private bool _resumeAfterRegionRecovery;
 
-    public OverlayWindow()
+    public OverlayWindow(BoundedDiagnosticLog? diagnostics = null)
     {
+        _diagnostics = diagnostics;
         Width = CollapsedWidth;
         Height = CollapsedHeight;
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
-        AllowsTransparency = true;
+        AllowsTransparency = false;
         Background = System.Windows.Media.Brushes.Transparent;
         Topmost = true;
         ShowInTaskbar = false;
         ShowActivated = false;
         SnapsToDevicePixels = true;
 
-        var colorBrush = new LinearGradientBrush
-        {
-            StartPoint = new System.Windows.Point(0, 0),
-            EndPoint = new System.Windows.Point(1, 1),
-            MappingMode = BrushMappingMode.RelativeToBoundingBox,
-            GradientStops =
-            {
-                new GradientStop(System.Windows.Media.Color.FromArgb(205, 70, 225, 255), 0),
-                new GradientStop(System.Windows.Media.Color.FromArgb(190, 122, 97, 255), 0.34),
-                new GradientStop(System.Windows.Media.Color.FromArgb(200, 255, 86, 184), 0.68),
-                new GradientStop(System.Windows.Media.Color.FromArgb(205, 74, 230, 216), 1),
-            },
-            RelativeTransform = new RotateTransform(0, 0.5, 0.5),
-        };
-        if (SystemParameters.ClientAreaAnimation && colorBrush.RelativeTransform is RotateTransform rotation)
-        {
-            rotation.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(0, 360, TimeSpan.FromSeconds(8))
-            {
-                RepeatBehavior = RepeatBehavior.Forever,
-            });
-        }
-
-        _surface = new Border
-        {
-            CornerRadius = new CornerRadius(26),
-            Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(160, 14, 18, 30)),
-            BorderBrush = colorBrush,
-            BorderThickness = new Thickness(1.25),
-            Effect = new System.Windows.Media.Effects.DropShadowEffect
-            {
-                Color = System.Windows.Media.Color.FromArgb(180, 88, 122, 255),
-                BlurRadius = 10,
-                ShadowDepth = 0,
-                Opacity = 0.42,
-            },
-            Child = _root,
-        };
-
-        ConfigureCollapsed();
-        ConfigureExpanded();
-        _expanded.Opacity = 0;
-        _expanded.IsHitTestVisible = false;
-        _root.Children.Add(_collapsed);
-        _root.Children.Add(_expanded);
-        Content = new Grid { Margin = new Thickness(5), Children = { _surface } };
+        Content = _surface;
 
         _leaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
         _leaveTimer.Tick += (_, _) => EvaluatePointerExit();
@@ -102,62 +55,28 @@ internal sealed class OverlayWindow : Window
         MouseLeftButtonDown += OnMouseLeftButtonDown;
         LocationChanged += (_, _) => PersistPosition();
         Loaded += (_, _) => RestorePosition();
-        SizeChanged += (_, _) => _surface.CornerRadius = new CornerRadius(26 - 4 * ExpansionProgress());
+        SizeChanged += (_, _) => RefreshWindowRegion();
+        DpiChanged += (_, _) => RefreshWindowRegion();
+        Closed += (_, _) => CloseNativeSurface();
         UpdateSnapshot(UsageSnapshot.Unavailable);
     }
 
     public void UpdateSnapshot(UsageSnapshot snapshot)
     {
-        var collapsed = snapshot.FiveHour.RemainingPercent is not null ? snapshot.FiveHour : snapshot.Weekly;
-        _collapsedValue.Text = FormatPercent(collapsed.RemainingPercent);
-        _fiveHourValue.Text = $"5h  {FormatPercent(snapshot.FiveHour.RemainingPercent)}";
-        _fiveHourReset.Text = FormatReset(snapshot.FiveHour);
-        _weeklyValue.Text = $"周   {FormatPercent(snapshot.Weekly.RemainingPercent)}";
-        _weeklyReset.Text = FormatReset(snapshot.Weekly);
+        _surface.UpdateSnapshot(snapshot);
     }
 
     public void ShowWithoutActivation()
     {
         if (!IsVisible) Show();
+        if (!_regionReady) RefreshWindowRegion();
+        if (!_regionReady)
+        {
+            _resumeAfterRegionRecovery = true;
+            Hide();
+            return;
+        }
         NativeMethods.ShowWindow(new WindowInteropHelper(this).Handle, NativeMethods.SwShownoactivate);
-    }
-
-    private void ConfigureCollapsed()
-    {
-        _collapsed.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
-        _collapsed.VerticalAlignment = VerticalAlignment.Stretch;
-        _collapsed.Children.Add(_collapsedValue);
-        _collapsedValue.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
-        _collapsedValue.VerticalAlignment = VerticalAlignment.Center;
-        _collapsedValue.Foreground = System.Windows.Media.Brushes.White;
-    }
-
-    private void ConfigureExpanded()
-    {
-        _expanded.Margin = new Thickness(10, 7, 10, 7);
-        _expanded.RowDefinitions.Add(new RowDefinition());
-        _expanded.RowDefinitions.Add(new RowDefinition());
-        _expanded.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        _expanded.ColumnDefinitions.Add(new ColumnDefinition());
-
-        AddRow(_fiveHourValue, _fiveHourReset, 0);
-        AddRow(_weeklyValue, _weeklyReset, 1);
-    }
-
-    private void AddRow(TextBlock value, TextBlock reset, int row)
-    {
-        value.Foreground = System.Windows.Media.Brushes.White;
-        value.VerticalAlignment = VerticalAlignment.Center;
-        reset.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromArgb(205, 235, 239, 255));
-        reset.TextAlignment = TextAlignment.Right;
-        reset.HorizontalAlignment = System.Windows.HorizontalAlignment.Right;
-        reset.VerticalAlignment = VerticalAlignment.Center;
-        Grid.SetRow(value, row);
-        Grid.SetColumn(value, 0);
-        Grid.SetRow(reset, row);
-        Grid.SetColumn(reset, 1);
-        _expanded.Children.Add(value);
-        _expanded.Children.Add(reset);
     }
 
     private void SetExpanded(bool expanded)
@@ -189,15 +108,7 @@ internal sealed class OverlayWindow : Window
         BeginAnimation(HeightProperty, new DoubleAnimation(ActualHeight, targetHeight, duration) { EasingFunction = easing });
         BeginAnimation(LeftProperty, new DoubleAnimation(Left, targetLeft, duration) { EasingFunction = easing });
         BeginAnimation(TopProperty, new DoubleAnimation(Top, targetTop, duration) { EasingFunction = easing });
-        _collapsed.BeginAnimation(OpacityProperty, new DoubleAnimation(expanded ? 0 : 1, TimeSpan.FromMilliseconds(expanded ? 70 : 100))
-        {
-            BeginTime = expanded ? TimeSpan.Zero : TimeSpan.FromMilliseconds(70),
-        });
-        _expanded.IsHitTestVisible = expanded;
-        _expanded.BeginAnimation(OpacityProperty, new DoubleAnimation(expanded ? 1 : 0, TimeSpan.FromMilliseconds(expanded ? 100 : 70))
-        {
-            BeginTime = expanded ? TimeSpan.FromMilliseconds(70) : TimeSpan.Zero,
-        });
+        _surface.SetExpanded(expanded, duration > TimeSpan.Zero);
         var timer = new DispatcherTimer { Interval = duration + TimeSpan.FromMilliseconds(20) };
         timer.Tick += (_, _) =>
         {
@@ -214,6 +125,7 @@ internal sealed class OverlayWindow : Window
             Height = targetHeight;
             Left = targetLeft;
             Top = targetTop;
+            RefreshWindowRegion();
             if (!expanded) _entryScreenBounds = null;
             _programmaticMove = false;
             timer.Stop();
@@ -268,10 +180,50 @@ internal sealed class OverlayWindow : Window
     {
         base.OnSourceInitialized(e);
         var source = (HwndSource)PresentationSource.FromVisual(this);
+        _nativeReady = true;
         source.AddHook(WndProc);
         var style = NativeMethods.GetWindowLongPtr(source.Handle, NativeMethods.GwlExstyle).ToInt64();
         NativeMethods.SetWindowLongPtr(source.Handle, NativeMethods.GwlExstyle,
             new IntPtr(style | NativeMethods.WsExNoactivate | NativeMethods.WsExToolwindow));
+        var backdropAvailable = _backdrop.TryEnable(source, out var backdropReason);
+        _surface.SetBackdropAvailable(backdropAvailable);
+        if (!backdropAvailable) _diagnostics?.Write("overlay-material", backdropReason);
+        RefreshWindowRegion();
+    }
+
+    private void RefreshWindowRegion()
+    {
+        if (_closed || !_nativeReady) return;
+        var result = _backdrop.UpdateRegion(OverlaySurface.CornerRadiusForHeight(ActualHeight));
+        _regionReady = result.Success;
+        if (result.Success)
+        {
+            _lastRegionFailure = null;
+            if (_resumeAfterRegionRecovery)
+            {
+                _resumeAfterRegionRecovery = false;
+                ShowWithoutActivation();
+            }
+            return;
+        }
+        _backdrop.DisableMaterial();
+        _surface.SetBackdropAvailable(false);
+        if (_lastRegionFailure != result.Reason) _diagnostics?.Write("overlay-region", result.Reason);
+        _lastRegionFailure = result.Reason;
+        if (IsLoaded && IsVisible)
+        {
+            _resumeAfterRegionRecovery = true;
+            Hide();
+        }
+    }
+
+    private void CloseNativeSurface()
+    {
+        _closed = true;
+        _nativeReady = false;
+        _regionReady = false;
+        _resumeAfterRegionRecovery = false;
+        _backdrop.Close();
     }
 
     private IntPtr WndProc(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -281,7 +233,7 @@ internal sealed class OverlayWindow : Window
             var packed = lParam.ToInt64();
             var screenPoint = new System.Windows.Point((short)(packed & 0xffff), (short)((packed >> 16) & 0xffff));
             var localPoint = PointFromScreen(screenPoint);
-            if (!IsInsideRoundedSurface(localPoint, ActualWidth, ActualHeight, _surface.CornerRadius.TopLeft))
+            if (!IsInsideRoundedSurface(localPoint, ActualWidth, ActualHeight, _surface.CornerRadius))
             {
                 handled = true;
                 return new IntPtr(NativeMethods.Httransparent);
@@ -297,11 +249,10 @@ internal sealed class OverlayWindow : Window
 
     internal static bool IsInsideRoundedSurface(System.Windows.Point point, double width, double height, double radius)
     {
-        const double margin = 5;
-        var left = margin;
-        var top = margin;
-        var right = width - margin;
-        var bottom = height - margin;
+        const double left = 0;
+        const double top = 0;
+        var right = width;
+        var bottom = height;
         if (point.X < left || point.X > right || point.Y < top || point.Y > bottom) return false;
         radius = Math.Clamp(radius, 0, Math.Min((right - left) / 2, (bottom - top) / 2));
         if (point.X >= left + radius && point.X <= right - radius) return true;
@@ -343,21 +294,6 @@ internal sealed class OverlayWindow : Window
         }
         catch (Exception error) when (error is SecurityException or UnauthorizedAccessException or IOException) { }
     }
-
-    private double ExpansionProgress() => Math.Clamp((ActualHeight - CollapsedHeight) / (ExpandedHeight - CollapsedHeight), 0, 1);
-    private static string FormatPercent(double? value) => value is null ? "--" : $"{Math.Round(value.Value):0}%";
-    private static string FormatReset(UsageWindow window)
-    {
-        if (window.ResetsAt is not { } epoch) return "重置  不可用";
-        var local = DateTimeOffset.FromUnixTimeSeconds(epoch).LocalDateTime;
-        return local.ToString(window.Kind == UsageWindowKind.Weekly ? "M/d ddd  HH:mm" : "HH:mm", CultureInfo.CurrentCulture);
-    }
-    private static TextBlock MakeText(double size, FontWeight weight) => new()
-    {
-        FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
-        FontSize = size,
-        FontWeight = weight,
-    };
 
     private static class NativeMethods
     {

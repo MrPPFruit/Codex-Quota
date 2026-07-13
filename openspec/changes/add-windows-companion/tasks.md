@@ -17,6 +17,8 @@
 - [x] 3.2 实现 52×52 / 130×78 DIP 单一彩色气泡、固定几何色流、额度回退、语义色和紧凑展开排版
 - [x] 3.3 实现 180ms 可中断展开/收起、内容交叉淡入淡出、10 DIP 空间迟滞和 Reduce Motion
 - [ ] 3.4 实现 PerMonitorV2、工作区钳制、负坐标、多 DPI 与显示器拔插的纯布局测试
+- [ ] 3.5 提取无窗口依赖的 `OverlaySurface`，移除 5 DIP 内缩、黑色实底、独立描边与外发光，并按 macOS 参考统一 52×52 / 130×78 的字体、语义色、固定色场和两行排版
+- [ ] 3.6 在 Windows 11 22621+ 实现并验证非 layered HWND、Desktop Acrylic 与动态 `SetWindowRgn`，材质不可用时仅使用不透明中性浅色降级
 
 ## 4. 托盘、偏好与启动项
 
@@ -30,6 +32,8 @@
 - [x] 5.2 增加 Windows Release publish 和 ZIP 脚本，验证测试、PE x64、版本、single-file、未签名状态、归档内容及 SHA-256
 - [x] 5.3 更新 README、CHANGELOG、Windows 安装/SmartScreen/升级/隐私说明和平台支持矩阵
 - [x] 5.4 从干净提交在 Windows runner 生成候选并回下载复验资产
+- [ ] 5.5 由 Windows runner 输出固定相位的收起/展开 WPF PNG，验证尺寸、透明角、文字安全区与无独立外圈；报告明确该证据不覆盖 DWM 桌面合成
+- [ ] 5.6 以 `0.2.0-preview.2` 生成新的 Windows x64 ZIP、SHA-256 与产品版本，拒绝覆盖已公开的 preview.1 资产
 
 ## 6. 审查与预发布
 
@@ -37,3 +41,5 @@
 - [x] 6.2 保持 macOS Swift、Node、构建和签名回归通过，Windows Core/UI 状态测试全部通过
 - [x] 6.3 使用 MrPPFruit 账号创建 `v0.2.0-preview.1` GitHub Prerelease，上传 Windows x64 ZIP 与 SHA-256 并验证线上资产
 - [ ] 6.4 在用户真实 Windows 11 x64 上完成 Store Codex locator、真实额度、焦点、hover/拖动、SmartScreen、DPI、登录启动和残留进程验收
+- [ ] 6.5 在真实 Windows 11 上完成 Acrylic 背景采样、圆形/圆角区域、浅色/深色/高频桌面背景、100%/125%/150%/200% DPI 与空闲动画 CPU 的视觉材质验收
+- [ ] 6.6 使用 MrPPFruit 账号创建 `v0.2.0-preview.2` Prerelease，并回下载校验新的 ZIP、SHA-256 与 UI 结构截图证据

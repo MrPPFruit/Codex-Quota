@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.2.0-preview.2 - 2026-07-14
+
+- Windows 气泡重构为系统 Desktop Acrylic、动态圆形窗口区域与 macOS 同构的内部彩色色场。
+- 移除 Windows 旧版黑色实底、彩色描边、外发光和 5 DIP 内缩，统一 52×52 / 130×78 尺寸、排版与额度回退语义。
+- 增加 Windows runner 固定 UI 结构截图；真实 Acrylic、DPI 和动画性能仍以 Windows 11 实机验收为准。
+
 ## 0.2.0-preview.1 - 2026-07-14
 
 - 新增 Windows 11 x64 原生 WPF Preview，提供 Codex 生命周期联动、额度气泡、托盘与用户级登录启动。
