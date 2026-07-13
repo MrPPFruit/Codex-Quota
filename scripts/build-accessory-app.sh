@@ -69,8 +69,8 @@ test "$(plutil -extract CFBundleExecutable raw -o - "$bundle/Contents/Info.plist
 test "$(plutil -extract CFBundleDisplayName raw -o - "$bundle/Contents/Info.plist")" = "Codex Quota"
 test "$(plutil -extract CFBundleIconFile raw -o - "$bundle/Contents/Info.plist")" = "CodexQuota"
 test -f "$bundle/Contents/Resources/CodexQuota.icns"
-test "$(plutil -extract CFBundleShortVersionString raw -o - "$bundle/Contents/Info.plist")" = "0.1.0"
-test "$(plutil -extract CFBundleVersion raw -o - "$bundle/Contents/Info.plist")" = "1"
+test "$(plutil -extract CFBundleShortVersionString raw -o - "$bundle/Contents/Info.plist")" = "0.1.1"
+test "$(plutil -extract CFBundleVersion raw -o - "$bundle/Contents/Info.plist")" = "2"
 test "$(plutil -extract LSMinimumSystemVersion raw -o - "$bundle/Contents/Info.plist")" = "26.0"
 
 codesign --force --deep --sign - "$bundle"

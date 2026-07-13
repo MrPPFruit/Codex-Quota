@@ -7,7 +7,15 @@
 - 本地构建：ad-hoc 签名。
 - Developer ID Application 证书：未配置。
 - Apple 公证与 stapling：未执行。
-- GitHub Release：只发布源码，不附带 `.app`、ZIP 或 DMG。
+- GitHub Release：`v0.1.1-preview.1` 提供明确标注的 arm64 未公证预览 ZIP 和 SHA-256；它不是 Developer ID 正式发行包，也不会标记为 Latest。
+
+## 未公证预览包
+
+macOS 会阻止首次打开。确认下载来源和 SHA-256 后，可先尝试打开应用，再前往“系统设置 → 隐私与安全性”，在安全性区域选择“仍要打开”。系统会把这次选择保存为该应用的例外。
+
+这种例外不证明开发者身份，也不证明应用经过 Apple 恶意软件扫描。不要关闭 Gatekeeper，不要建议用户全局移除下载隔离属性。
+
+受管理设备可能禁止手动放行。预览版升级时需要手动替换应用，Gatekeeper 例外和登录项授权也可能需要重新确认。SHA-256 仅用于核对 Release 下载内容，不能替代 Developer ID 签名。
 
 ## 正式发布的最小链路
 

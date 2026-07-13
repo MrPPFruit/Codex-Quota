@@ -47,9 +47,20 @@ artifacts/build/Codex Quota.app
 
 ## 发布状态
 
-`v0.1.0` 是公开源码版本。目前没有发布可供普通用户直接下载运行的 `.app`、ZIP 或 DMG，因为项目尚未使用 Developer ID 证书完成 Hardened Runtime 签名和 Apple 公证。请勿把本地 ad-hoc 构建重新打包成“正式版”分发。
+`v0.1.1-preview.1` 提供 Apple silicon 的未公证预览 ZIP。它使用 ad-hoc 签名，不具备 Developer ID 身份，也没有经过 Apple 公证；macOS 会在首次运行时阻止它。这个包只适合了解风险并信任本仓库源码与 Release 校验值的测试用户，不等同于正式可信分发。SHA-256 只能校验下载内容是否与 Release 资产一致，不能替代开发者身份认证。
 
-正式二进制发布所需步骤见 [macOS 分发说明](docs/macos-distribution.md)。
+首次打开时：
+
+1. 将 `Codex Quota.app` 移到 `/Applications`。
+2. 尝试打开一次，等待 macOS 显示安全警告。
+3. 打开“系统设置 → 隐私与安全性”，在安全性区域选择“仍要打开”。
+4. 核对系统再次显示的应用名称后确认打开。
+
+不要关闭 Gatekeeper，也不要执行全局移除隔离属性的命令。Developer ID 到位后，项目会改为 Hardened Runtime 签名和 Apple 公证的正式 ZIP 或 DMG。
+
+受企业管理策略约束的 Mac 可能没有“仍要打开”入口。预览版没有自动更新器；升级时请退出应用、替换 `/Applications` 中的旧版本并重新打开。由于每次 ad-hoc 构建的身份可能变化，新版本可能需要再次执行“仍要打开”；若登录项失效，可在应用菜单中关闭后重新启用“登录时启动”。
+
+风险、校验和未来正式二进制发布步骤见 [macOS 分发说明](docs/macos-distribution.md)。
 
 ## 隐私与权限
 

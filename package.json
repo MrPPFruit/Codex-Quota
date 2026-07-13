@@ -1,6 +1,6 @@
 {
   "name": "codex-quota",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "A compact macOS quota companion for Codex.",
   "type": "module",
@@ -20,6 +20,7 @@
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "build:accessory": "bash scripts/build-accessory-app.sh",
+    "package:unsigned": "bash scripts/package-unsigned-release.sh",
     "smoke:accessory": "SMOKE_EXPECT_CODEX_PRESENCE=present bash scripts/run-accessory-smoke.sh && SMOKE_EXPECT_CODEX_PRESENCE=absent bash scripts/run-accessory-smoke.sh",
     "verify:accessory": "npm run build:accessory && npm run smoke:accessory"
   }

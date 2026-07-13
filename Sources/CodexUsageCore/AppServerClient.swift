@@ -358,7 +358,7 @@ public actor AppServerClient: UsageStreamingClient {
             _ = try await request("initialize", params: ["clientInfo": .object([
                 "name": .string("codex-quota"),
                 "title": .string("Codex Quota"),
-                "version": .string("0.1.0"),
+                "version": .string("0.1.1"),
             ])], generation: connectionGeneration)
             try await notify("initialized", params: [:], generation: connectionGeneration)
             let result = try await request("account/rateLimits/read", params: [:], generation: connectionGeneration)

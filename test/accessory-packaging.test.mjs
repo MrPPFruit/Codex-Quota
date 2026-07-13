@@ -46,8 +46,21 @@ test("smoke is PID-owned, deadline bounded, and emits redacted JSON", async () =
 test("package exposes accessory build and verification entry points", async () => {
   const packageJSON = JSON.parse(await read("package.json"));
   assert.equal(packageJSON.scripts["build:accessory"], "bash scripts/build-accessory-app.sh");
+  assert.equal(packageJSON.scripts["package:unsigned"], "bash scripts/package-unsigned-release.sh");
   assert.equal(packageJSON.scripts["verify:accessory"], "npm run build:accessory && npm run smoke:accessory");
   assert.equal(packageJSON.scripts["smoke:accessory"], "SMOKE_EXPECT_CODEX_PRESENCE=present bash scripts/run-accessory-smoke.sh && SMOKE_EXPECT_CODEX_PRESENCE=absent bash scripts/run-accessory-smoke.sh");
+});
+
+test("unsigned preview packaging is explicit, checks identity, and emits a checksum", async () => {
+  const script = await read("scripts/package-unsigned-release.sh");
+  assert.match(script, /Signature=adhoc/);
+  assert.match(script, /Mach-O.*arm64/);
+  assert.match(script, /ditto -c -k --norsrc --noextattr --noacl --noqtn --keepParent/);
+  assert.match(script, /unzip -Z1/);
+  assert.match(script, /spctl --assess --type execute/);
+  assert.match(script, /shasum -a 256/);
+  assert.match(script, /-preview\.1-macos-arm64\.zip/);
+  assert.doesNotMatch(script, /xattr|spctl --master-disable/);
 });
 
 test("public product identity is consistent across persistence and app-server metadata", async () => {
