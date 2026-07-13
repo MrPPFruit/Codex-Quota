@@ -7,6 +7,10 @@
 - **WHEN** 可信的官方 Codex Windows 包进程从缺席变为运行，随后再次退出
 - **THEN** 系统启动一个额度会话并显示悬浮窗，退出后有界关闭该会话、隐藏悬浮窗且不遗留所属 app-server 子进程
 
+#### Scenario: 官方桌面宿主迁移为 ChatGPT
+- **WHEN** 官方桌面应用从 `Codex` 进程名迁移为 `ChatGPT`，但 Package Family Name 仍为 `OpenAI.Codex_2p2nqsd0c76g0`
+- **THEN** 系统把进程名仅作为发现提示，以精确包身份识别官方宿主并继续额度会话；错误包身份的同名进程不得进入 locator
+
 #### Scenario: 重复启动伴侣
 - **WHEN** 当前用户已经运行一个 Codex Quota 实例后再次启动同一程序
 - **THEN** 第二个实例立即退出且不创建第二个托盘、窗口、启动项或 app-server 子进程
@@ -59,6 +63,10 @@
 #### Scenario: 视觉结构对齐
 - **WHEN** 以固定充分额度分别渲染收起态和展开态
 - **THEN** 输出尺寸分别为 52×52 与 130×78，四角位于当前圆形/圆角区域之外，收起态百分比与周期标签保持安全边距，展开态两行信息在左右组之间平衡且无裁切、重叠或独立外圈
+
+#### Scenario: 旋转色场完整覆盖
+- **WHEN** 色场在收起、展开或 hover 中间帧以任意角度旋转
+- **THEN** 同一个固定几何色场 SHALL 覆盖当前圆形或圆角矩形的全部可见区域，左右两端不得露出无色底层，且色场尺寸不得随 hover 形变追踪或重新填充
 
 #### Scenario: hover 展开与空间迟滞
 - **WHEN** 指针进入收起圆形后停留，随后移动到展开窗口边缘并离开
@@ -113,6 +121,10 @@
 #### Scenario: 视觉重构预发布不覆盖历史版本
 - **WHEN** Windows Acrylic 与视觉对齐重构生成可下载候选
 - **THEN** 系统以新的 `v0.2.0-preview.2` 产品版本、ZIP 和 SHA-256 创建 Prerelease，不修改或覆盖既有 preview.1 标签与资产
+
+#### Scenario: Windows 实机反馈修复不覆盖历史版本
+- **WHEN** 修复官方 ChatGPT 宿主发现与展开态色场露白后生成候选
+- **THEN** 系统以新的 `v0.2.0-preview.3` 产品版本、ZIP 和 SHA-256 创建 Prerelease，不修改或覆盖既有 preview.1/preview.2 标签与资产
 
 #### Scenario: Windows 实机验收
 - **WHEN** 用户在真实 Windows 11 x64、已登录的 Codex Desktop 环境运行预览版

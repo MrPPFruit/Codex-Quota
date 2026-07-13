@@ -15,12 +15,14 @@ namespace CodexQuota.App;
 
 internal sealed class OverlaySurface : Grid
 {
+    private const double AuroraFieldSize = 160;
     private static readonly Lazy<ImageSource> AuroraTexture = new(CreateAuroraTexture);
     private static readonly Color Primary = Color.FromArgb(235, 26, 28, 38);
     private static readonly Color Secondary = Color.FromArgb(173, 46, 51, 69);
 
     private readonly Border _baseLayer = new();
     private readonly Border _colorLayer = new();
+    private readonly Canvas _colorCanvas = new();
     private readonly System.Windows.Controls.Image _colorImage = new();
     private readonly Grid _collapsed = new();
     private readonly Grid _expanded = new();
@@ -48,15 +50,16 @@ internal sealed class OverlaySurface : Grid
         SnapsToDevicePixels = true;
 
         _colorImage.Source = AuroraTexture.Value;
-        _colorImage.Width = 152;
-        _colorImage.Height = 152;
+        _colorImage.Width = AuroraFieldSize;
+        _colorImage.Height = AuroraFieldSize;
         _colorImage.Stretch = Stretch.Fill;
         _colorImage.Opacity = 0.60;
         _colorImage.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
         _colorImage.VerticalAlignment = System.Windows.VerticalAlignment.Center;
         _colorImage.RenderTransformOrigin = new System.Windows.Point(0.5, 0.5);
         _colorImage.RenderTransform = _auroraRotation;
-        _colorLayer.Child = _colorImage;
+        _colorCanvas.Children.Add(_colorImage);
+        _colorLayer.Child = _colorCanvas;
         if (animateColorFlow && SystemParameters.ClientAreaAnimation)
         {
             _auroraRotation.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(0, 360, TimeSpan.FromSeconds(10))
@@ -241,6 +244,8 @@ internal sealed class OverlaySurface : Grid
         if (ActualWidth <= 0 || ActualHeight <= 0) return;
         var radius = CornerRadius;
         var corner = new CornerRadius(radius);
+        Canvas.SetLeft(_colorImage, (ActualWidth - AuroraFieldSize) / 2);
+        Canvas.SetTop(_colorImage, (ActualHeight - AuroraFieldSize) / 2);
         _baseLayer.CornerRadius = corner;
         _colorLayer.CornerRadius = corner;
         Clip = new RectangleGeometry(new Rect(0, 0, ActualWidth, ActualHeight), radius, radius);
