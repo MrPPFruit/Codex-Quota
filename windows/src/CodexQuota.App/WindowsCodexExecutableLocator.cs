@@ -56,7 +56,7 @@ internal sealed class WindowsCodexExecutableLocator
         return null;
     }
 
-    private static bool TryGetRunningCodexIdentity(
+    private bool TryGetRunningCodexIdentity(
         CancellationToken cancellationToken,
         out string thumbprint,
         out string packageRoot,
