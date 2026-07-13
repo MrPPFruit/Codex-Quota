@@ -7,6 +7,10 @@
 - **WHEN** 可信的官方 Codex Windows 包进程从缺席变为运行，随后再次退出
 - **THEN** 系统启动一个额度会话并显示悬浮窗，退出后有界关闭该会话、隐藏悬浮窗且不遗留所属 app-server 子进程
 
+#### Scenario: 官方桌面宿主迁移为 ChatGPT
+- **WHEN** 官方桌面应用从 `Codex` 进程名迁移为 `ChatGPT`，但 Package Family Name 仍为 `OpenAI.Codex_2p2nqsd0c76g0`
+- **THEN** 系统把进程名仅作为发现提示，以精确包身份识别官方宿主并继续额度会话；错误包身份的同名进程不得进入 locator
+
 #### Scenario: 重复启动伴侣
 - **WHEN** 当前用户已经运行一个 Codex Quota 实例后再次启动同一程序
 - **THEN** 第二个实例立即退出且不创建第二个托盘、窗口、启动项或 app-server 子进程
@@ -16,7 +20,7 @@
 - **THEN** 系统仅保留低开销托盘与生命周期检测，不显示额度气泡也不启动 app-server
 
 ### Requirement: Codex 可执行文件发现与信任 Gate
-系统 MUST 只从运行中的官方 Codex MSIX 包身份和少量明确的每用户 Codex helper 根目录推导候选。系统 MUST 拒绝任意 PATH 猜测、相对路径、reparse point、超出允许根目录的文件及未通过真实性检查的候选；没有候选通过时 SHALL 安全降级为不可用，且 MUST NOT 读取、复制或保存 Codex 认证文件。
+系统 MUST 只从运行中的官方 MSIX 包身份和该进程对应的系统保护 WindowsApps 包根推导固定 helper 候选。系统 MUST 拒绝任意 PATH 猜测、用户可写 mirror、递归搜索、相对路径、reparse point、超出允许根目录的文件及未通过真实性检查的候选；没有候选通过时 SHALL 安全降级为不可用，且 MUST NOT 读取、复制或保存 Codex 认证文件。
 
 #### Scenario: 可信 helper 可用
 - **WHEN** 官方 Codex 包正在运行，候选位于允许的 canonical 根目录、无 reparse point、Authenticode 验证有效且在总 deadline 内通过 app-server capability probe
@@ -28,7 +32,7 @@
 
 #### Scenario: 多个可信候选
 - **WHEN** 多个候选均通过真实性与能力检查
-- **THEN** 系统使用确定性的优先级选择官方每用户 mirror 中与当前 Codex 包匹配的候选，不按文件更新时间或递归扫描结果猜测
+- **THEN** 系统使用确定性的优先级选择官方 WindowsApps 包根内与当前宿主签名匹配的固定候选，不按文件更新时间或递归扫描结果猜测
 
 ### Requirement: Windows 额度协议语义
 系统 SHALL 通过 JSONL stdio 执行 `initialize → initialized → account/rateLimits/read`，识别 300 分钟与 10080 分钟窗口，并把 `usedPercent` 转换为剩余百分比。系统 MUST 支持稀疏 `account/rateLimits/updated`、完整刷新、断线不可用、有界退避重连、有限数字校验和 1 MiB 单帧上限。
@@ -59,6 +63,10 @@
 #### Scenario: 视觉结构对齐
 - **WHEN** 以固定充分额度分别渲染收起态和展开态
 - **THEN** 输出尺寸分别为 52×52 与 130×78，四角位于当前圆形/圆角区域之外，收起态百分比与周期标签保持安全边距，展开态两行信息在左右组之间平衡且无裁切、重叠或独立外圈
+
+#### Scenario: 旋转色场完整覆盖
+- **WHEN** 色场在收起、展开或 hover 中间帧以任意角度旋转
+- **THEN** 同一个固定几何色场 SHALL 覆盖当前圆形或圆角矩形的全部可见区域，左右两端不得露出无色底层，且色场尺寸不得随 hover 形变追踪或重新填充
 
 #### Scenario: hover 展开与空间迟滞
 - **WHEN** 指针进入收起圆形后停留，随后移动到展开窗口边缘并离开
@@ -113,6 +121,10 @@
 #### Scenario: 视觉重构预发布不覆盖历史版本
 - **WHEN** Windows Acrylic 与视觉对齐重构生成可下载候选
 - **THEN** 系统以新的 `v0.2.0-preview.2` 产品版本、ZIP 和 SHA-256 创建 Prerelease，不修改或覆盖既有 preview.1 标签与资产
+
+#### Scenario: Windows 实机反馈修复不覆盖历史版本
+- **WHEN** 修复官方 ChatGPT 宿主发现与展开态色场露白后生成候选
+- **THEN** 系统以新的 `v0.2.0-preview.3` 产品版本、ZIP 和 SHA-256 创建 Prerelease，不修改或覆盖既有 preview.1/preview.2 标签与资产
 
 #### Scenario: Windows 实机验收
 - **WHEN** 用户在真实 Windows 11 x64、已登录的 Codex Desktop 环境运行预览版

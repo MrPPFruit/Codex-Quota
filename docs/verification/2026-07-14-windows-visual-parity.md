@@ -14,22 +14,23 @@ Windows 内部 WPF 表面已完成结构级对齐：收起/展开尺寸、字体
 - Windows 展开态：130×78 DIP。
 - 两端使用相同的 10 秒单向色流、半透明白层、粉/青/紫/蓝色域、额度阈值和紧凑两行信息结构。
 
-Windows 不再使用会留下扇区分界的角向分段位图。当前色场由四个相互重叠的二维高斯柔光团生成，并在固定 152×152 DIP 几何中旋转；hover 只改变窗口外形，不重新缩放或追踪色层。
+Windows 不再使用会留下扇区分界的角向分段位图。当前色场由四个相互重叠的二维高斯柔光团生成，并在固定 160×160 DIP Canvas 子层中旋转；该尺寸覆盖 130×78 DIP 展开表面的任意旋转角并保留抗锯齿余量，hover 只改变窗口外形，不重新缩放或追踪色层。
+
+preview.2 的 runner PNG 与用户实机截图证明，原 `Image` 被父布局约束后会在展开态的部分相位露出白色底层。preview.3 将固定色场放入不压缩子元素的 Canvas，并在 0/24/45/90/135°、96/144 DPI 下逐点验证圆角矩形内部没有退回白色 base layer。
 
 ## 自动化证据
 
-- GitHub Actions：[CI 29274677047](https://github.com/MrPPFruit/Codex-Quota/actions/runs/29274677047) PASS。
-- Windows Release build、Core tests、App/UI tests、x64 self-contained single-file 打包与 SHA-256 校验 PASS。
+- GitHub Actions：[CI 29280378291](https://github.com/MrPPFruit/Codex-Quota/actions/runs/29280378291) 对 preview.3 候选提交 `d2e624a` PASS。
+- Windows Release build、Core tests 15/15、App/UI tests 12/12、x64 self-contained single-file 打包与 SHA-256 校验 PASS。
 - macOS Node、Swift、bundle build 与 codesign 回归 PASS。
-- Windows runner 产物 `codex-quota-windows-ui-captures` 包含固定相位的 `collapsed.png` 与 `expanded.png`；截图验证透明角、表面满铺、文字安全区和无独立外圈。
+- Windows runner 产物 `codex-quota-windows-ui-captures` 包含固定相位的 `collapsed.png`、`expanded.png`，以及不可用状态在 0/24/45/90/135°、96/144 DPI 下的展开 PNG；截图与边缘像素断言共同验证透明角、完整色场覆盖、文字安全区和无独立外圈。
 - 本地 `npm test` 27/27、`swift test` 138/138、`openspec validate add-windows-companion --strict` PASS。
 
 ## 预发布产物
 
-- GitHub Prerelease：[v0.2.0-preview.2](https://github.com/MrPPFruit/Codex-Quota/releases/tag/v0.2.0-preview.2)。
-- Windows x64 ZIP SHA-256：`940d6d083410707ea37bb808a0aa1cc76cec93a7c6562fb357eeeca4b6a05661`。
-- Release 同时保留固定 WPF 收起/展开结构截图；截图不包含 DWM 桌面合成。
-- 发布后已重新下载 ZIP 与 `.sha256` 文件，并通过 `shasum -a 256 -c` 校验。
+- 当前公开版本仍为 GitHub Prerelease：[v0.2.0-preview.2](https://github.com/MrPPFruit/Codex-Quota/releases/tag/v0.2.0-preview.2)，其 Windows x64 ZIP SHA-256 为 `940d6d083410707ea37bb808a0aa1cc76cec93a7c6562fb357eeeca4b6a05661`。
+- CI 29280378291 已生成尚未发布的 `v0.2.0-preview.3` 候选，ZIP SHA-256 为 `9c51dd63d8900e85abe6b6d28733041d0d4c7d8611b83f850d5be611701a88f7`；已从 Actions artifact 回下载并通过 `.sha256` 校验。
+- preview.3 只有在 PR 合并、main CI 重新生成并再次回下载校验后才可创建 Release；当前不得把候选描述为已发布版本。
 
 ## 实机验收门
 

@@ -11,15 +11,25 @@ namespace CodexQuota.App;
 
 internal sealed record CodexExecutableCandidate(string Path, string Signer);
 
-internal sealed class WindowsCodexExecutableLocator(BoundedDiagnosticLog diagnostics)
+internal sealed class WindowsCodexExecutableLocator
 {
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(3);
+    private readonly BoundedDiagnosticLog _diagnostics;
+    private readonly Func<CancellationToken, Process[]> _findOfficial;
+
+    internal WindowsCodexExecutableLocator(
+        BoundedDiagnosticLog diagnostics,
+        Func<CancellationToken, Process[]>? findOfficial = null)
+    {
+        _diagnostics = diagnostics;
+        _findOfficial = findOfficial ?? WindowsCodexPackageProcesses.FindOfficial;
+    }
 
     public async Task<CodexExecutableCandidate?> LocateAsync(CancellationToken cancellationToken)
     {
-        if (!TryGetRunningCodexIdentity(out var expectedThumbprint, out var packageRoot))
+        if (!TryGetRunningCodexIdentity(cancellationToken, out var expectedThumbprint, out var packageRoot, out var identityFailure))
         {
-            diagnostics.Write("locator", "Official Codex signer unavailable");
+            _diagnostics.Write("locator", identityFailure);
             return null;
         }
 
@@ -37,33 +47,38 @@ internal sealed class WindowsCodexExecutableLocator(BoundedDiagnosticLog diagnos
 
             if (await SupportsAppServerAsync(candidate, cancellationToken).ConfigureAwait(false))
             {
-                diagnostics.Write("locator", $"Trusted Codex helper accepted ({signer})");
+                _diagnostics.Write("locator", $"Trusted OpenAI helper accepted ({signer})");
                 return new CodexExecutableCandidate(candidate, signer);
             }
         }
 
-        diagnostics.Write("locator", "No trusted Codex helper available");
+        _diagnostics.Write("locator", "No trusted OpenAI helper available");
         return null;
     }
 
-    private static bool TryGetRunningCodexIdentity(out string thumbprint, out string packageRoot)
+    private bool TryGetRunningCodexIdentity(
+        CancellationToken cancellationToken,
+        out string thumbprint,
+        out string packageRoot,
+        out string failure)
     {
         thumbprint = string.Empty;
         packageRoot = string.Empty;
-        foreach (var process in Process.GetProcessesByName("Codex"))
+        failure = "Official OpenAI desktop package process unavailable";
+        var processes = _findOfficial(cancellationToken);
+        try
         {
-            using (process)
+            if (processes.Length == 0) return false;
+            failure = "Official OpenAI package executable unavailable";
+            foreach (var process in processes)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 try
                 {
-                    if (!WindowsCodexProcessProbe.TryGetPackageFamilyName(process.Id, out var family) ||
-                        !CodexPackagePolicy.IsOfficial(family))
-                    {
-                        continue;
-                    }
                     var executable = process.MainModule?.FileName;
                     if (string.IsNullOrWhiteSpace(executable) ||
                         !AuthenticodePolicy.TryVerify(executable, out _, out thumbprint)) continue;
+                    failure = "Official OpenAI package root unavailable";
                     if (!TryResolveProtectedPackageRoot(executable, out packageRoot)) continue;
                     return true;
                 }
@@ -71,6 +86,10 @@ internal sealed class WindowsCodexExecutableLocator(BoundedDiagnosticLog diagnos
                 {
                 }
             }
+        }
+        finally
+        {
+            foreach (var process in processes) process.Dispose();
         }
         return false;
     }
