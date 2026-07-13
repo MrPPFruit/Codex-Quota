@@ -12,6 +12,13 @@ var tests = new (string Name, Action Body)[]
     ("JSONL 支持分片和 CRLF", JsonLinesHandleFragments),
     ("JSONL 超限后清空并拒绝", JsonLineLimitFailsClosed),
     ("诊断文本移除本机目录与换行", DiagnosticsAreRedacted),
+    ("Codex 包身份只接受官方精确 family", PackageIdentityIsExact),
+    ("Codex 生命周期只在状态变化时发布", PresenceTransitionsAreDeduplicated),
+    ("悬浮窗在负坐标工作区保持可见", PlacementSupportsNegativeCoordinates),
+    ("悬浮窗拒绝无法容纳面板的工作区", PlacementRejectsUndersizedWorkArea),
+    ("迟到完整快照不能覆盖后续稀疏更新", StaleFullSnapshotCannotOverwritePatch),
+    ("要求刷新通知会废弃在途完整快照", InvalidatingPatchRejectsInflightSnapshot),
+    ("发布顺序与额度 revision 保持一致", PublicationsFollowStateRevision),
 };
 
 var failures = new List<string>();
@@ -134,6 +141,100 @@ static void DiagnosticsAreRedacted()
     Assert(result.Contains("%USERPROFILE%", StringComparison.Ordinal), "profile marker missing");
 }
 
+static void PackageIdentityIsExact()
+{
+    Assert(CodexPackagePolicy.IsOfficial("OpenAI.Codex_2p2nqsd0c76g0"), "official family rejected");
+    Assert(!CodexPackagePolicy.IsOfficial("openai.codex_2p2nqsd0c76g0"), "case change accepted");
+    Assert(!CodexPackagePolicy.IsOfficial("OpenAI.Codex_2p2nqsd0c76g0.fake"), "suffix accepted");
+    Assert(!CodexPackagePolicy.IsOfficial(null), "null accepted");
+}
+
+static void PresenceTransitionsAreDeduplicated()
+{
+    using var cancellation = new CancellationTokenSource();
+    var probe = new FakeProcessProbe(new FakeObservedProcess(), null);
+    var changes = new List<bool>();
+    var monitor = new CodexPresenceMonitor(
+        probe,
+        TimeSpan.Zero,
+        (_, _) =>
+        {
+            cancellation.Cancel();
+            return Task.CompletedTask;
+        });
+    monitor.RunAsync((present, _) =>
+    {
+        changes.Add(present);
+        return ValueTask.CompletedTask;
+    }, cancellation.Token).GetAwaiter().GetResult();
+    AssertEqual(2, changes.Count, "presence transition count");
+    AssertEqual(true, changes[0], "first transition");
+    AssertEqual(false, changes[1], "second transition");
+}
+
+static void PlacementSupportsNegativeCoordinates()
+{
+    var frame = OverlayPlacement.ClampCentered(-2_000, 900, 130, 78, new DesktopRect(-1_920, 0, 1_920, 1_080));
+    Assert(frame is not null, "placement unexpectedly failed");
+    var value = frame ?? throw new InvalidOperationException("placement unexpectedly failed");
+    AssertEqual(-1_920d, value.Left, "negative left clamp");
+    AssertEqual(861d, value.Top, "vertical center");
+}
+
+static void PlacementRejectsUndersizedWorkArea()
+{
+    var frame = OverlayPlacement.ClampCentered(0, 0, 130, 78, new DesktopRect(0, 0, 100, 50));
+    Assert(frame is null, "oversized panel was accepted");
+}
+
+static void StaleFullSnapshotCannotOverwritePatch()
+{
+    using var snapshotDocument = LoadFixture("full-snapshot.json");
+    using var patchDocument = LoadFixture("sparse-update.json");
+    Assert(RateLimitJson.TryParsePayload(snapshotDocument.RootElement, out var initial), "payload parse failed");
+    Assert(RateLimitJson.TryParsePatch(patchDocument.RootElement, out var patch), "patch parse failed");
+    var state = new UsagePayloadState();
+    Assert(state.TryCommitFull(state.CaptureRevision(), initial, out _), "initial commit failed");
+    var staleRevision = state.CaptureRevision();
+    var application = state.Apply(patch);
+    Assert(!application.RequiresFullRefresh, "patch required refresh");
+    Assert(!state.TryCommitFull(staleRevision, initial, out _), "stale snapshot overwrote patch");
+    AssertEqual(89d, application.Snapshot?.FiveHour.RemainingPercent ?? -1, "patch value");
+}
+
+static void InvalidatingPatchRejectsInflightSnapshot()
+{
+    using var snapshotDocument = LoadFixture("full-snapshot.json");
+    Assert(RateLimitJson.TryParsePayload(snapshotDocument.RootElement, out var initial), "payload parse failed");
+    var state = new UsagePayloadState();
+    Assert(state.TryCommitFull(state.CaptureRevision(), initial, out _), "initial commit failed");
+    var staleRevision = state.CaptureRevision();
+    var invalidating = new RateLimitPatch(
+        FieldPatch<RateLimitWindowPatch>.FromValue(new RateLimitWindowPatch(
+            FieldPatch<double>.FromValue(10),
+            FieldPatch<int>.Null,
+            FieldPatch<long>.Missing)),
+        FieldPatch<RateLimitWindowPatch>.Missing);
+    Assert(state.Apply(invalidating).RequiresFullRefresh, "invalid identity did not require refresh");
+    Assert(!state.TryCommitFull(staleRevision, initial, out _), "invalidated in-flight snapshot committed");
+}
+
+static void PublicationsFollowStateRevision()
+{
+    using var snapshotDocument = LoadFixture("full-snapshot.json");
+    using var patchDocument = LoadFixture("sparse-update.json");
+    Assert(RateLimitJson.TryParsePayload(snapshotDocument.RootElement, out var initial), "payload parse failed");
+    Assert(RateLimitJson.TryParsePatch(patchDocument.RootElement, out var patch), "patch parse failed");
+    var state = new UsagePayloadState();
+    Assert(state.TryCommitFull(state.CaptureRevision(), initial, out _), "initial commit failed");
+    var staleRevision = state.CaptureRevision();
+    var publications = new List<double?>();
+    Assert(state.ApplyAndPublish(patch, snapshot => publications.Add(snapshot.FiveHour.RemainingPercent)), "patch publish failed");
+    Assert(!state.TryCommitFullAndPublish(staleRevision, initial, snapshot => publications.Add(snapshot.FiveHour.RemainingPercent)), "stale publish succeeded");
+    AssertEqual(1, publications.Count, "publication count");
+    AssertEqual(89d, publications[0] ?? -1, "published revision");
+}
+
 static JsonDocument LoadFixture(string name)
 {
     var path = Path.Combine(AppContext.BaseDirectory, "fixtures", "rate-limits", name);
@@ -154,4 +255,21 @@ static void AssertEqual<T>(T expected, T actual, string message)
     {
         throw new InvalidOperationException($"{message}: expected={expected}, actual={actual}");
     }
+}
+
+file sealed class FakeProcessProbe(params IObservedCodexProcess?[] observations) : ICodexProcessProbe
+{
+    private readonly Queue<IObservedCodexProcess?> _observations = new(observations);
+    public ValueTask<IObservedCodexProcess?> FindRunningAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(_observations.Count > 0 ? _observations.Dequeue() : null);
+    }
+}
+
+file sealed class FakeObservedProcess : IObservedCodexProcess
+{
+    public int ProcessId => 42;
+    public Task WaitForExitAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public void Dispose() { }
 }

@@ -43,7 +43,7 @@ Windows 首版需要让用户下载后参与真实设备验证；开发环境与
 
 ### 5. 使用 Win32 无激活窗口策略和空间迟滞
 
-WPF Window 使用 `WindowStyle=None`、`AllowsTransparency=True`、`ShowInTaskbar=false`，创建 HWND 后设置 `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`，处理 `WM_MOUSEACTIVATE → MA_NOACTIVATE`。拖动通过 `WM_NCHITTEST → HTCAPTION`，透明形状外返回 `HTTRANSPARENT`。
+WPF Window 使用 `WindowStyle=None`、`AllowsTransparency=True`、`ShowInTaskbar=false`，创建 HWND 后设置 `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`，处理 `WM_MOUSEACTIVATE → MA_NOACTIVATE`。`WM_NCHITTEST` 只负责让透明形状外返回 `HTTRANSPARENT`；形状内统一由 WPF `DragMove()` 拥有拖动生命周期，避免原生 non-client drag 与动画中断形成双重所有者。
 
 几何仅由 180ms 窗口过渡驱动；内容先淡出后淡入并裁切在实时轮廓内。hover 保持区复用 macOS 已验证的“入口 frame ∪ 展开 frame + 10 DIP”，避免屏幕边缘振荡。循环色流固定中心和尺寸，只旋转颜色相位；Reduce Motion 时移除动画时钟。
 
