@@ -1,0 +1,12 @@
+{
+  "primary": {
+    "usedPercent": 7,
+    "windowDurationMins": 300,
+    "resetsAt": 1783987200
+  },
+  "secondary": {
+    "usedPercent": 22,
+    "windowDurationMins": 10080,
+    "resetsAt": 1784505600
+  }
+}

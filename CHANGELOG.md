@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.2.0-preview.1 - 2026-07-14
+
+- 新增 Windows 11 x64 原生 WPF Preview，提供 Codex 生命周期联动、额度气泡、托盘与用户级登录启动。
+- Windows 包为 self-contained single-file ZIP，不要求单独安装 .NET。
+- 首个 Windows Preview 未进行商业代码签名，需通过 SHA-256 校验并接受 SmartScreen 测试边界。
+
 ## 0.1.1-preview.1 - 2026-07-14
 
 - 增加 arm64、ad-hoc 签名、未公证预览包及 SHA-256 校验文件，没有新增核心功能。

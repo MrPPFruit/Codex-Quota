@@ -63,6 +63,14 @@ test("unsigned preview packaging is explicit, checks identity, and emits a check
   assert.doesNotMatch(script, /xattr|spctl --master-disable/);
 });
 
+test("Windows preview checksum is portable across operating systems", async () => {
+  const script = await read("windows/scripts/package-release.ps1");
+  assert.match(script, /WriteAllText\(\$checksum/);
+  assert.match(script, /UTF8Encoding\]::new\(\$false\)/);
+  assert.match(script, /\$checksumBytes -contains 0x0d/);
+  assert.doesNotMatch(script, /Set-Content \"\$archive\.sha256\"/);
+});
+
 test("public product identity is consistent across persistence and app-server metadata", async () => {
   const overlay = await read("Sources/CodexUsageUI/UsageOverlayView.swift");
   const client = await read("Sources/CodexUsageCore/AppServerClient.swift");
