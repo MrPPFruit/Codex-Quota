@@ -7,6 +7,7 @@ build_root="$artifacts_dir/build"
 bundle="$build_root/Codex Quota.app"
 plist="$repo_root/config/accessory-Info.plist"
 icon_source="$repo_root/assets/branding/CodexQuota-AppIcon-1024.png"
+number_font_source="$repo_root/assets/fonts/Num_Digits_Only.ttf"
 
 [[ ! -L "$artifacts_dir" && ! -L "$build_root" ]] || {
   echo "拒绝清理符号链接构建目录" >&2
@@ -37,6 +38,11 @@ esac
 
 install -m 755 "$executable_real" "$bundle/Contents/MacOS/CodexUsageAccessory"
 install -m 644 "$plist" "$bundle/Contents/Info.plist"
+[[ -f "$number_font_source" && ! -L "$number_font_source" ]] || {
+  echo "数字字体缺失或为符号链接" >&2
+  exit 1
+}
+install -m 644 "$number_font_source" "$bundle/Contents/Resources/Num_Digits_Only.ttf"
 
 [[ -f "$icon_source" && ! -L "$icon_source" ]] || {
   echo "应用图标缺失或为符号链接" >&2
@@ -69,6 +75,7 @@ test "$(plutil -extract CFBundleExecutable raw -o - "$bundle/Contents/Info.plist
 test "$(plutil -extract CFBundleDisplayName raw -o - "$bundle/Contents/Info.plist")" = "Codex Quota"
 test "$(plutil -extract CFBundleIconFile raw -o - "$bundle/Contents/Info.plist")" = "CodexQuota"
 test -f "$bundle/Contents/Resources/CodexQuota.icns"
+test -f "$bundle/Contents/Resources/Num_Digits_Only.ttf"
 test "$(plutil -extract CFBundleShortVersionString raw -o - "$bundle/Contents/Info.plist")" = "0.1.1"
 test "$(plutil -extract CFBundleVersion raw -o - "$bundle/Contents/Info.plist")" = "2"
 test "$(plutil -extract LSMinimumSystemVersion raw -o - "$bundle/Contents/Info.plist")" = "26.0"

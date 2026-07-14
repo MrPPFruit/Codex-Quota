@@ -251,8 +251,7 @@ public struct UsageOverlayView: View {
     private func percentageText(_ window: UsageWindow, level: UsageSemanticLevel, size: CGFloat) -> some View {
         let isAvailable = level != .unavailable
         return Text(UsageVisibleQuotaText.make(for: window))
-            .font(.system(size: size, weight: .bold))
-            .monospacedDigit()
+            .font(QuotaNumberFont.font(size: size))
             .foregroundStyle(textColor(for: level))
             .lineLimit(1)
             .minimumScaleFactor(0.86)
