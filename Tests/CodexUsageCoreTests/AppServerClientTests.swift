@@ -126,7 +126,12 @@ struct AppServerClientTests {
     @Test("整体 deadline、spawn/write/read failure 都不可用并清理")
     func boundedFailures() async throws {
         let timeoutTransport = FakeAppServerTransport()
-        let timeoutClient = AppServerClient(executable: executable, transportFactory: { timeoutTransport }, deadline: .milliseconds(30))
+        let timeoutClient = AppServerClient(
+            executable: executable,
+            transportFactory: { timeoutTransport },
+            deadline: .milliseconds(30),
+            initialReadDeadline: .milliseconds(30)
+        )
         await #expect(throws: AppServerClientError.self) { try await timeoutClient.start() }
         #expect(await timeoutClient.snapshot() == .unavailable)
         #expect(await timeoutTransport.closeCount == 1)
@@ -154,7 +159,12 @@ struct AppServerClientTests {
     func hangingOperationsRespectDeadline() async throws {
         let startTransport = FakeAppServerTransport()
         await startTransport.setHangsOnStart()
-        let startClient = AppServerClient(executable: executable, transportFactory: { startTransport }, deadline: .milliseconds(30))
+        let startClient = AppServerClient(
+            executable: executable,
+            transportFactory: { startTransport },
+            deadline: .milliseconds(30),
+            initialReadDeadline: .milliseconds(30)
+        )
         let clock = ContinuousClock()
         let startedAt = clock.now
         await #expect(throws: AppServerClientError.self) { try await startClient.start() }
@@ -164,12 +174,42 @@ struct AppServerClientTests {
 
         let writeTransport = FakeAppServerTransport()
         await writeTransport.setHangsOnWrite()
-        let writeClient = AppServerClient(executable: executable, transportFactory: { writeTransport }, deadline: .milliseconds(30))
+        let writeClient = AppServerClient(
+            executable: executable,
+            transportFactory: { writeTransport },
+            deadline: .milliseconds(30),
+            initialReadDeadline: .milliseconds(30)
+        )
         await #expect(throws: AppServerClientError.self) { try await writeClient.start() }
         try await eventually { await writeTransport.closeCount >= 1 }
         await writeTransport.emitLate(Fixtures.response(id: 1, rateLimits: Fixtures.snapshotJSON))
         try? await Task.sleep(for: .milliseconds(20))
         #expect(await writeClient.snapshot() == .unavailable)
+    }
+
+    @Test("首个额度响应可超过常规操作预算但不能超过冷启动预算")
+    func slowInitialReadUsesDedicatedColdStartDeadline() async throws {
+        let transport = FakeAppServerTransport()
+        let client = AppServerClient(
+            executable: executable,
+            transportFactory: { transport },
+            deadline: .milliseconds(100),
+            initialReadDeadline: .milliseconds(500)
+        )
+
+        let started = Task { try await client.start() }
+        try await eventually { await transport.requestIDs().count == 1 }
+        let initializeID = try #require(await transport.requestIDs().first)
+        await transport.emit(Fixtures.response(id: initializeID, rateLimits: "{}"))
+        try await eventually { await transport.requestIDs().count == 2 }
+
+        try await Task.sleep(for: .milliseconds(150))
+        let readID = try #require(await transport.requestIDs().last)
+        await transport.emit(Fixtures.response(id: readID, rateLimits: Fixtures.snapshotJSON))
+
+        #expect(try await started.value == UsageNormalizer.normalize(Fixtures.snapshot))
+        #expect(await transport.closeCount == 0)
+        try await client.close()
     }
 
     @Test("存活连接超过首次握手 timeout 后仍可按新 deadline refresh")
