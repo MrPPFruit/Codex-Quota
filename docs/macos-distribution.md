@@ -7,7 +7,7 @@
 - 本地构建：ad-hoc 签名。
 - Developer ID Application 证书：未配置。
 - Apple 公证与 stapling：未执行。
-- GitHub Release：`v0.1.1-preview.1` 提供明确标注的 arm64 未公证预览 ZIP 和 SHA-256；它不是 Developer ID 正式发行包，也不会标记为 Latest。
+- GitHub Release：唯一的统一预览 Release `v0.1.0` 提供明确标注的 arm64 未公证 ZIP、Windows 11 x64 ZIP 和各自 SHA-256；它不是 Developer ID 正式发行包，也不会标记为 Latest。
 
 ## 未公证预览包
 

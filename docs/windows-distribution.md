@@ -1,6 +1,6 @@
 # Windows 预览版分发说明
 
-Codex Quota `v0.2.0-preview.3` 的 Windows 资产面向 Windows 11 x64 测试。它由 GitHub Actions 的 Windows runner 从公开源码构建，采用 .NET 10 self-contained single-file WPF 发布，因此用户不需要另行安装 .NET Runtime。该版本不会覆盖已发布的 `v0.2.0-preview.1` 或 `v0.2.0-preview.2`。
+Codex Quota 统一 `v0.1.0` Release 的 Windows 资产面向 Windows 11 x64 测试。它由 GitHub Actions 的 Windows runner 从公开源码构建，采用 .NET 10 self-contained single-file WPF 发布，因此用户不需要另行安装 .NET Runtime。平台适配与缺陷修复会覆盖该 Release 的 Windows 资产，而不会创建新的面向用户的 preview 版本。
 
 ## 当前信任边界
 

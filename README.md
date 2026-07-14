@@ -50,7 +50,9 @@ artifacts/build/Codex Quota.app
 
 ## 发布状态
 
-`v0.1.1-preview.1` 提供 Apple silicon 的未公证预览 ZIP。它使用 ad-hoc 签名，不具备 Developer ID 身份，也没有经过 Apple 公证；macOS 会在首次运行时阻止它。这个包只适合了解风险并信任本仓库源码与 Release 校验值的测试用户，不等同于正式可信分发。SHA-256 只能校验下载内容是否与 Release 资产一致，不能替代开发者身份认证。
+项目只维护一个统一的公开预览 Release：[`v0.1.0`](https://github.com/MrPPFruit/Codex-Quota/releases/tag/v0.1.0)。它同时包含 Apple silicon macOS 与 Windows 11 x64 安装包；后续平台适配和缺陷修复会覆盖该 Release 的资产，而不会为没有新增用户功能的修复额外创建公开版本页。
+
+macOS 包使用 ad-hoc 签名，不具备 Developer ID 身份，也没有经过 Apple 公证；macOS 会在首次运行时阻止它。这个包只适合了解风险并信任本仓库源码与 Release 校验值的测试用户，不等同于正式可信分发。SHA-256 只能校验下载内容是否与 Release 资产一致，不能替代开发者身份认证。
 
 首次打开时：
 
@@ -67,14 +69,14 @@ artifacts/build/Codex Quota.app
 
 ### Windows 11 x64 Preview
 
-`v0.2.0-preview.3` 的 Windows ZIP 未使用商业代码签名证书，因此 SmartScreen 可能显示“Windows 已保护你的电脑”。请先核对 Release 中的 SHA-256，只从本项目官方 Release 下载；确认后可选择“更多信息 → 仍要运行”。这只适用于愿意测试公开源码构建的用户，不等同于已签名正式分发。
+统一 `v0.1.0` Release 中的 Windows ZIP 未使用商业代码签名证书，因此 SmartScreen 可能显示“Windows 已保护你的电脑”。请先核对 Release 中的 SHA-256，只从本项目官方 Release 下载；确认后可选择“更多信息 → 仍要运行”。这只适用于愿意测试公开源码构建的用户，不等同于已签名正式分发。
 
 1. 完整解压 ZIP 到固定目录，例如 `%LOCALAPPDATA%\Programs\Codex Quota`。
 2. 运行一次 `CodexQuota.exe`；它会在托盘中常驻，并默认注册当前路径为用户级登录启动项。
 3. 官方 ChatGPT 桌面应用打开时气泡显示，应用退出时气泡隐藏。托盘菜单可关闭登录启动或退出。
 4. 升级时先从托盘退出，再替换旧文件。不要直接从 ZIP 内运行。
 
-Windows 版不申请管理员权限，不安装服务，不修改 Codex。预览版首次在真实 Windows 11 上的 Store 路径、SmartScreen、DPI 与登录启动验收将由 Release 下载测试完成；在此之前它保持 Prerelease 标记。
+Windows 版不申请管理员权限，不安装服务，不修改 Codex。统一 Release 保持 Prerelease 标记，直到 macOS 公证、Windows Authenticode 签名和完整实机验收完成。
 
 详细风险和实机验收清单见 [Windows 分发说明](docs/windows-distribution.md)。
 
@@ -91,7 +93,7 @@ Windows 版不申请管理员权限，不安装服务，不修改 Codex。预览
 - 公开窗口信息无法可靠识别 Codex 小宠物，因此当前只提供独立悬浮窗，不强行吸附到宠物旁。
 - 多显示器布局已有自动化测试，但首版尚未完成多屏 Mac 实机验收。
 - 当前未验证 Intel Mac。
-- Windows 统一版 ChatGPT 没有公开“当前是否位于 Codex 模式”的进程信号，因此 preview.3 以官方桌面宿主生命周期为边界；即使当前停留在 Chat 或 Work，宿主仍运行时气泡也可能保持显示。
+- Windows 统一版 ChatGPT 没有公开“当前是否位于 Codex 模式”的进程信号，因此 Windows 组件以官方桌面宿主生命周期为边界；即使当前停留在 Chat 或 Work，宿主仍运行时气泡也可能保持显示。
 - 首个公开版本的 bundle identifier 为 `com.ppfruit.codex-quota`；后续版本会保持这一身份不变，以维持登录项和本地偏好的连续性。
 
 ## 许可证与声明
