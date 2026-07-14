@@ -18,6 +18,7 @@ public final class AccessoryApp: NSObject, NSApplicationDelegate {
     private var isQuitting = false
 
     public static func main() {
+        QuotaNumberFont.register()
         let application = NSApplication.shared
         let delegate = AccessoryApp()
         application.delegate = delegate

@@ -20,5 +20,6 @@
   <ItemGroup>
     <ProjectReference Include="../CodexQuota.Core/CodexQuota.Core.csproj" />
     <Resource Include="Assets/CodexQuota.ico" />
+    <Resource Include="Assets/Num_Digits_Only.ttf" />
   </ItemGroup>
 </Project>

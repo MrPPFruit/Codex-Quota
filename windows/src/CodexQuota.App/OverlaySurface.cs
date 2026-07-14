@@ -19,6 +19,7 @@ internal sealed class OverlaySurface : Grid
     private static readonly Lazy<ImageSource> AuroraTexture = new(CreateAuroraTexture);
     private static readonly Color Primary = Color.FromArgb(235, 26, 28, 38);
     private static readonly Color Secondary = Color.FromArgb(173, 46, 51, 69);
+    private static readonly FontFamily QuotaNumberFont = new(new Uri("pack://application:,,,/"), "./Assets/#QuotaNumber");
 
     private readonly Border _baseLayer = new();
     private readonly Border _colorLayer = new();
@@ -26,12 +27,12 @@ internal sealed class OverlaySurface : Grid
     private readonly System.Windows.Controls.Image _colorImage = new();
     private readonly Grid _collapsed = new();
     private readonly Grid _expanded = new();
-    private readonly TextBlock _collapsedValue = MakeText(17, FontWeights.Bold);
+    private readonly TextBlock _collapsedValue = MakeNumberText(17);
     private readonly TextBlock _collapsedLabel = MakeText(9.5, FontWeights.Medium);
-    private readonly TextBlock _fiveHourValue = MakeText(14, FontWeights.Bold);
+    private readonly TextBlock _fiveHourValue = MakeNumberText(14);
     private readonly TextBlock _fiveHourResetDate = MakeText(9, FontWeights.Normal);
     private readonly TextBlock _fiveHourResetTime = MakeText(9, FontWeights.Normal);
-    private readonly TextBlock _weeklyValue = MakeText(14, FontWeights.Bold);
+    private readonly TextBlock _weeklyValue = MakeNumberText(14);
     private readonly TextBlock _weeklyResetDate = MakeText(9, FontWeights.Normal);
     private readonly TextBlock _weeklyResetTime = MakeText(9, FontWeights.Normal);
     private readonly RotateTransform _auroraRotation = new(0);
@@ -298,6 +299,13 @@ internal sealed class OverlaySurface : Grid
             LineHeight = size + 1,
         };
         Typography.SetNumeralAlignment(text, FontNumeralAlignment.Tabular);
+        return text;
+    }
+
+    private static TextBlock MakeNumberText(double size)
+    {
+        var text = MakeText(size, FontWeights.Bold);
+        text.FontFamily = QuotaNumberFont;
         return text;
     }
 
