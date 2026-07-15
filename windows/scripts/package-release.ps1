@@ -70,7 +70,7 @@ $noticeTemplate = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(
 $noticeText = [string]::Format($noticeTemplate, $Version)
 [IO.File]::WriteAllText($notice, $noticeText, [Text.UTF8Encoding]::new($false))
 
-$archiveName = "Codex-Quota-v$Version-windows-x64.zip"
+$archiveName = "Codex-Quota-windows-x64.zip"
 $archive = Join-Path $release $archiveName
 Compress-Archive -Path (Join-Path $publish "*") -DestinationPath $archive -CompressionLevel Optimal
 $verification = Join-Path $release "verify"
