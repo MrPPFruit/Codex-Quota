@@ -20,8 +20,10 @@ internal sealed class OverlayWindow : Window
     private const double ExpandedHeight = 78;
     private readonly OverlaySurface _surface = new();
     private readonly WindowsBackdrop _backdrop = new();
+    private readonly OverlayCompositionMode _compositionMode;
     private readonly DispatcherTimer _leaveTimer;
     private readonly BoundedDiagnosticLog? _diagnostics;
+    private readonly Action? _showContextMenu;
     private bool _expandedState;
     private bool _programmaticMove;
     private Rect? _entryScreenBounds;
@@ -32,14 +34,19 @@ internal sealed class OverlayWindow : Window
     private string? _lastRegionFailure;
     private bool _resumeAfterRegionRecovery;
 
-    public OverlayWindow(BoundedDiagnosticLog? diagnostics = null)
+    public OverlayWindow(
+        BoundedDiagnosticLog? diagnostics = null,
+        OverlayCompositionMode? compositionMode = null,
+        Action? showContextMenu = null)
     {
         _diagnostics = diagnostics;
+        _showContextMenu = showContextMenu;
+        _compositionMode = compositionMode ?? SelectCompositionMode(Environment.OSVersion.Version);
         Width = CollapsedWidth;
         Height = CollapsedHeight;
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
-        AllowsTransparency = false;
+        AllowsTransparency = _compositionMode == OverlayCompositionMode.PerPixelAlpha;
         Background = System.Windows.Media.Brushes.Transparent;
         Topmost = true;
         ShowInTaskbar = false;
@@ -52,6 +59,7 @@ internal sealed class OverlayWindow : Window
         _leaveTimer.Tick += (_, _) => EvaluatePointerExit();
         MouseEnter += (_, _) => SetExpanded(true);
         MouseLeave += (_, _) => _leaveTimer.Start();
+        PreviewMouseRightButtonUp += OnPreviewMouseRightButtonUp;
         MouseLeftButtonDown += OnMouseLeftButtonDown;
         LocationChanged += (_, _) => PersistPosition();
         Loaded += (_, _) => RestorePosition();
@@ -176,6 +184,12 @@ internal sealed class OverlayWindow : Window
         PersistPosition();
     }
 
+    private void OnPreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _showContextMenu?.Invoke();
+        e.Handled = true;
+    }
+
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
@@ -185,6 +199,13 @@ internal sealed class OverlayWindow : Window
         var style = NativeMethods.GetWindowLongPtr(source.Handle, NativeMethods.GwlExstyle).ToInt64();
         NativeMethods.SetWindowLongPtr(source.Handle, NativeMethods.GwlExstyle,
             new IntPtr(style | NativeMethods.WsExNoactivate | NativeMethods.WsExToolwindow));
+        if (_compositionMode == OverlayCompositionMode.PerPixelAlpha)
+        {
+            _surface.SetBackdropAvailable(false);
+            _diagnostics?.Write("overlay-material", "Per-pixel alpha surface enabled");
+            RefreshWindowRegion();
+            return;
+        }
         var backdropAvailable = _backdrop.TryEnable(source, out var backdropReason);
         _surface.SetBackdropAvailable(backdropAvailable);
         if (!backdropAvailable) _diagnostics?.Write("overlay-material", backdropReason);
@@ -194,16 +215,16 @@ internal sealed class OverlayWindow : Window
     private void RefreshWindowRegion()
     {
         if (_closed || !_nativeReady) return;
+        if (_compositionMode == OverlayCompositionMode.PerPixelAlpha)
+        {
+            MarkRegionReady();
+            return;
+        }
         var result = _backdrop.UpdateRegion(OverlaySurface.CornerRadiusForHeight(ActualHeight));
         _regionReady = result.Success;
         if (result.Success)
         {
-            _lastRegionFailure = null;
-            if (_resumeAfterRegionRecovery)
-            {
-                _resumeAfterRegionRecovery = false;
-                ShowWithoutActivation();
-            }
+            MarkRegionReady();
             return;
         }
         _backdrop.DisableMaterial();
@@ -215,6 +236,15 @@ internal sealed class OverlayWindow : Window
             _resumeAfterRegionRecovery = true;
             Hide();
         }
+    }
+
+    private void MarkRegionReady()
+    {
+        _regionReady = true;
+        _lastRegionFailure = null;
+        if (!_resumeAfterRegionRecovery) return;
+        _resumeAfterRegionRecovery = false;
+        ShowWithoutActivation();
     }
 
     private void CloseNativeSurface()
@@ -264,6 +294,12 @@ internal sealed class OverlayWindow : Window
         return dx * dx + dy * dy <= radius * radius;
     }
 
+    internal static OverlayCompositionMode SelectCompositionMode(Version version) =>
+        version.Major > 10 ||
+        version.Major == 10 && version.Build >= 22621
+            ? OverlayCompositionMode.DesktopAcrylic
+            : OverlayCompositionMode.PerPixelAlpha;
+
     private void RestorePosition()
     {
         try
@@ -306,4 +342,10 @@ internal sealed class OverlayWindow : Window
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool ShowWindow(IntPtr hwnd, int command);
     }
+}
+
+internal enum OverlayCompositionMode
+{
+    PerPixelAlpha,
+    DesktopAcrylic,
 }

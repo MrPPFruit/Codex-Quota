@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using CodexQuota.Core;
@@ -7,9 +8,15 @@ using Microsoft.Win32.SafeHandles;
 
 namespace CodexQuota.App;
 
+internal sealed record OfficialCodexPackageIdentity(
+    string FamilyName,
+    string FullName,
+    string InstallPath);
+
 internal static class WindowsCodexPackageProcesses
 {
     internal delegate bool PackageFamilyReader(int processId, out string? familyName);
+    internal delegate bool PackageIdentityReader(int processId, out OfficialCodexPackageIdentity? identity);
 
     internal static IReadOnlyList<string> DiscoveryNames { get; } = Array.AsReadOnly(new[] { "Codex", "ChatGPT" });
 
@@ -126,11 +133,86 @@ internal static class WindowsCodexPackageProcesses
         return true;
     }
 
+    internal static bool TryGetOfficialIdentity(int processId, out OfficialCodexPackageIdentity? identity)
+    {
+        identity = null;
+        using var process = NativeMethods.OpenProcess(
+            NativeMethods.ProcessQueryLimitedInformation,
+            inheritHandle: false,
+            processId);
+        if (process.IsInvalid ||
+            !TryReadPackageString(process, NativeMethods.GetPackageFamilyName, out var familyName) ||
+            !CodexPackagePolicy.IsOfficial(familyName) ||
+            !TryReadPackageString(process, NativeMethods.GetPackageFullName, out var fullName) ||
+            !TryGetInstallPath(fullName, out var installPath))
+        {
+            return false;
+        }
+
+        identity = new OfficialCodexPackageIdentity(familyName, fullName, installPath);
+        return true;
+    }
+
+    private delegate int ReadPackageString(
+        SafeProcessHandle process,
+        ref uint length,
+        StringBuilder? buffer);
+
+    private static bool TryReadPackageString(
+        SafeProcessHandle process,
+        ReadPackageString read,
+        out string value)
+    {
+        value = string.Empty;
+        uint length = 0;
+        if (read(process, ref length, null) != NativeMethods.ErrorInsufficientBuffer || length <= 1)
+        {
+            return false;
+        }
+
+        var buffer = new StringBuilder(checked((int)length));
+        if (read(process, ref length, buffer) != NativeMethods.ErrorSuccess)
+        {
+            return false;
+        }
+
+        value = buffer.ToString();
+        return !string.IsNullOrWhiteSpace(value);
+    }
+
+    private static bool TryGetInstallPath(string fullName, out string installPath)
+    {
+        installPath = string.Empty;
+        uint length = 0;
+        if (NativeMethods.GetPackagePathByFullName2(
+                fullName,
+                NativeMethods.PackagePathTypeInstall,
+                ref length,
+                null) != NativeMethods.ErrorInsufficientBuffer || length <= 1)
+        {
+            return false;
+        }
+
+        var buffer = new StringBuilder(checked((int)length));
+        if (NativeMethods.GetPackagePathByFullName2(
+                fullName,
+                NativeMethods.PackagePathTypeInstall,
+                ref length,
+                buffer) != NativeMethods.ErrorSuccess)
+        {
+            return false;
+        }
+
+        installPath = buffer.ToString();
+        return Path.IsPathFullyQualified(installPath) && Directory.Exists(installPath);
+    }
+
     private static class NativeMethods
     {
         public const uint ProcessQueryLimitedInformation = 0x1000;
         public const int ErrorSuccess = 0;
         public const int ErrorInsufficientBuffer = 122;
+        public const int PackagePathTypeInstall = 0;
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern SafeProcessHandle OpenProcess(
@@ -143,5 +225,18 @@ internal static class WindowsCodexPackageProcesses
             SafeProcessHandle process,
             ref uint packageFamilyNameLength,
             StringBuilder? packageFamilyName);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+        public static extern int GetPackageFullName(
+            SafeProcessHandle process,
+            ref uint packageFullNameLength,
+            StringBuilder? packageFullName);
+
+        [DllImport("kernelbase.dll", CharSet = CharSet.Unicode)]
+        public static extern int GetPackagePathByFullName2(
+            string packageFullName,
+            int packagePathType,
+            ref uint pathLength,
+            StringBuilder? path);
     }
 }

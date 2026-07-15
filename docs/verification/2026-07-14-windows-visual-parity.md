@@ -4,7 +4,7 @@
 
 Windows 内部 WPF 表面已完成结构级对齐：收起/展开尺寸、字体层级、额度回退、语义色、两行排版、透明角和单一连续色场均与 macOS 当前设计保持一致。旧版的 5 DIP 内缩、黑色实底、独立彩色描边、外发光和角向分段色带已经移除。
 
-真实材质仍有一项必须在 Windows 11 桌面完成的验收：CI 的 `RenderTargetBitmap` 只能捕获 WPF 内容，不能捕获 DWM Desktop Acrylic 对桌面背景的采样、折射和圆角抗锯齿。因此本报告不把离屏 PNG 解释为完整桌面材质通过。
+Windows 10 19045 已改用 layered HWND 保留 WPF `Clip` 的逐像素 Alpha，避免 `SetWindowRgn` 的 1-bit 圆角锯齿。真实材质仍有一项必须在 Windows 11 桌面完成的验收：CI 的 `RenderTargetBitmap` 只能捕获 WPF 内容，不能捕获 DWM Desktop Acrylic 对桌面背景的采样、折射和圆角抗锯齿。因此本报告不把离屏 PNG 解释为完整桌面材质通过。
 
 ## 对照基准
 
@@ -14,16 +14,18 @@ Windows 内部 WPF 表面已完成结构级对齐：收起/展开尺寸、字体
 - Windows 展开态：130×78 DIP。
 - 两端使用相同的 10 秒单向色流、半透明白层、粉/青/紫/蓝色域、额度阈值和紧凑两行信息结构。
 
-Windows 不再使用会留下扇区分界的角向分段位图。当前色场由四个相互重叠的二维高斯柔光团生成，并在固定 160×160 DIP Canvas 子层中旋转；该尺寸覆盖 130×78 DIP 展开表面的任意旋转角并保留抗锯齿余量，hover 只改变窗口外形，不重新缩放或追踪色层。
+Windows 色场改为复用 macOS `soft` 预设的青、蓝、紫、粉角向顺序；生成器先进行饱和度与亮度校准、中心漫射，再以二维模糊消除中心汇聚处的硬扇区。色场在固定 160×160 DIP Canvas 子层中旋转；乳白底和静态明暗层不参与旋转。该尺寸覆盖 130×78 DIP 展开表面的任意旋转角并保留抗锯齿余量，hover 只改变窗口外形，不重新缩放或追踪色层。
 
-preview.2 的 runner PNG 与用户实机截图证明，原 `Image` 被父布局约束后会在展开态的部分相位露出白色底层。preview.3 将固定色场放入不压缩子元素的 Canvas，并在 0/24/45/90/135°、96/144 DPI 下逐点验证圆角矩形内部没有退回白色 base layer。
+preview.2 的 runner PNG 与用户实机截图证明，原 `Image` 被父布局约束后会在展开态的部分相位露出白色底层。preview.3 将固定色场放入不压缩子元素的 Canvas；当前测试在 0/24/45/90/135°、96/120/144/192 DPI 下逐点验证圆角矩形内部没有退回白色 base layer。
 
 ## 自动化证据
 
 - GitHub Actions：[main CI 29280820477](https://github.com/MrPPFruit/Codex-Quota/actions/runs/29280820477) 对合并提交 `c02635f` PASS。
-- Windows Release build、Core tests 15/15、App/UI tests 12/12、x64 self-contained single-file 打包与 SHA-256 校验 PASS。
+- Windows Release build、Core tests 15/15、App/UI tests 28/28、x64 self-contained single-file 打包与 SHA-256 校验 PASS。
+- 2026-07-15 在真实 Store 包 `OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0` 上确认：Windows Package API 返回真实安装根；WindowsApps 包内 helper 直接执行被系统拒绝；官方同步到 `%LOCALAPPDATA%\OpenAI\Codex\bin` 的当前版本副本与包内基准 SHA-256 完全一致、OpenAI 签名有效，并成功完成 `app-server --help`、`initialize` 与 `account/rateLimits/read`。
+- 同一实机会话截图确认收起态显示本周 71%，hover 展开态显示双行额度与重置时间，移出后恢复 52×52；当前设备为 Windows 10 19045，只证明中性降级表面，不替代 Windows 11 Acrylic 验收。
 - macOS Node、Swift、bundle build 与 codesign 回归 PASS。
-- Windows runner 产物 `codex-quota-windows-ui-captures` 包含固定相位的 `collapsed.png`、`expanded.png`，以及不可用状态在 0/24/45/90/135°、96/144 DPI 下的展开 PNG；截图与边缘像素断言共同验证透明角、完整色场覆盖、文字安全区和无独立外圈。
+- Windows runner 产物 `codex-quota-windows-ui-captures` 包含固定相位的 `collapsed.png`、`expanded.png`、Win10 不透明降级对应 PNG，以及不可用状态在 0/24/45/90/135°、96/120/144/192 DPI 下的展开 PNG；截图与边缘像素断言共同验证透明角、完整色场覆盖、文字安全区和无独立外圈。
 - 本地 `npm test` 27/27、`swift test` 138/138、`openspec validate add-windows-companion --strict` PASS。
 
 ## 预发布产物

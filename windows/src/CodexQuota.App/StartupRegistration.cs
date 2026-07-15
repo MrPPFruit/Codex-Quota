@@ -44,6 +44,9 @@ internal sealed class StartupRegistration
         }
     }
 
+    public StartupMenuPresentation MenuPresentation =>
+        StartupMenuPresentation.Create(CanRegisterCurrentExecutable(), IsEnabled);
+
     public bool CanRegisterCurrentExecutable()
     {
         try

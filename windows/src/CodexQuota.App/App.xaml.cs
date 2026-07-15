@@ -30,7 +30,7 @@ public partial class App : System.Windows.Application
 
         _diagnostics = new BoundedDiagnosticLog();
         _diagnostics.Write("lifecycle", "Codex Quota 0.2.0 started");
-        _overlay = new OverlayWindow(_diagnostics);
+        _overlay = new OverlayWindow(_diagnostics, showContextMenu: () => _tray?.ShowContextMenu());
         try
         {
             using var preferences = Registry.CurrentUser.CreateSubKey(@"Software\CodexQuota", writable: false);
@@ -42,7 +42,11 @@ public partial class App : System.Windows.Application
         {
             _ = startup.SetEnabled(true);
         }
-        _tray = new TrayController(startup, ToggleVisibility, () => _ = BeginShutdownAsync());
+        _tray = new TrayController(
+            startup,
+            () => new OverlayMenuState(_codexPresent, !_userHidden),
+            ToggleVisibility,
+            () => _ = BeginShutdownAsync());
         _lifetime = new CancellationTokenSource();
         var locator = new WindowsCodexExecutableLocator(_diagnostics);
         _coordinator = new UsageSessionCoordinator(locator, _diagnostics, Publish);

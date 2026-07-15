@@ -9,46 +9,115 @@ using CodexQuota.Core;
 
 namespace CodexQuota.App;
 
-internal sealed record CodexExecutableCandidate(string Path, string Signer);
+internal sealed record AuthenticodeIdentity(string Signer, string Thumbprint);
+
+internal sealed class CodexExecutableCandidate : IDisposable
+{
+    private IDisposable? _executionLease;
+
+    internal CodexExecutableCandidate(string path, string signer, IDisposable? executionLease = null)
+    {
+        Path = path;
+        Signer = signer;
+        _executionLease = executionLease;
+    }
+
+    public string Path { get; }
+    public string Signer { get; }
+
+    public void Dispose() => Interlocked.Exchange(ref _executionLease, null)?.Dispose();
+}
 
 internal sealed class WindowsCodexExecutableLocator
 {
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(3);
     private readonly BoundedDiagnosticLog _diagnostics;
     private readonly Func<CancellationToken, Process[]> _findOfficial;
+    private readonly WindowsCodexPackageProcesses.PackageIdentityReader _readPackageIdentity;
+    private readonly Func<Process, string?> _readExecutablePath;
+    private readonly Func<string, AuthenticodeIdentity?> _verifyAuthenticode;
+    private readonly Func<string, CancellationToken, Task<bool>> _supportsAppServer;
+    private readonly string _localAppData;
 
     internal WindowsCodexExecutableLocator(
         BoundedDiagnosticLog diagnostics,
         Func<CancellationToken, Process[]>? findOfficial = null)
+        : this(
+            diagnostics,
+            findOfficial ?? WindowsCodexPackageProcesses.FindOfficial,
+            WindowsCodexPackageProcesses.TryGetOfficialIdentity,
+            process => process.MainModule?.FileName,
+            AuthenticodePolicy.Verify,
+            supportsAppServer: null,
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData))
+    {
+    }
+
+    internal WindowsCodexExecutableLocator(
+        BoundedDiagnosticLog diagnostics,
+        Func<CancellationToken, Process[]> findOfficial,
+        WindowsCodexPackageProcesses.PackageIdentityReader readPackageIdentity,
+        Func<Process, string?> readExecutablePath,
+        Func<string, AuthenticodeIdentity?> verifyAuthenticode,
+        Func<string, CancellationToken, Task<bool>>? supportsAppServer,
+        string localAppData)
     {
         _diagnostics = diagnostics;
-        _findOfficial = findOfficial ?? WindowsCodexPackageProcesses.FindOfficial;
+        _findOfficial = findOfficial;
+        _readPackageIdentity = readPackageIdentity;
+        _readExecutablePath = readExecutablePath;
+        _verifyAuthenticode = verifyAuthenticode;
+        _supportsAppServer = supportsAppServer ?? SupportsAppServerAsync;
+        _localAppData = localAppData;
     }
 
     public async Task<CodexExecutableCandidate?> LocateAsync(CancellationToken cancellationToken)
     {
-        if (!TryGetRunningCodexIdentity(cancellationToken, out var expectedThumbprint, out var packageRoot, out var identityFailure))
+        if (!TryGetRunningCodexIdentity(cancellationToken, out var identity, out var identityFailure))
         {
             _diagnostics.Write("locator", identityFailure);
             return null;
         }
 
-        foreach (var candidate in EnumerateCandidates(packageRoot))
+        if (!TryGetPackageHelperBaseline(identity!.InstallPath, out var baseline))
+        {
+            _diagnostics.Write("locator", "Official OpenAI package helper baseline unavailable");
+            return null;
+        }
+
+        foreach (var candidate in EnumerateRuntimeCandidates())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!IsSafeRegularFile(candidate) ||
-                !AuthenticodePolicy.TryVerify(candidate, out var signer, out var thumbprint) ||
-                !CryptographicOperations.FixedTimeEquals(
-                    Convert.FromHexString(expectedThumbprint),
-                    Convert.FromHexString(thumbprint)))
+            FileStream? lease = null;
+            try
             {
-                continue;
-            }
+                lease = new FileStream(
+                    candidate,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read,
+                    bufferSize: 65_536,
+                    FileOptions.SequentialScan);
+                if (!IsSafeRegularFileWithinRoot(GetRuntimeRoot(), candidate) ||
+                    !MatchesBaseline(lease, baseline.Hash))
+                {
+                    continue;
+                }
 
-            if (await SupportsAppServerAsync(candidate, cancellationToken).ConfigureAwait(false))
+                if (await _supportsAppServer(candidate, cancellationToken).ConfigureAwait(false))
+                {
+                    _diagnostics.Write("locator", $"Trusted OpenAI runtime accepted ({baseline.Signer})");
+                    var accepted = new CodexExecutableCandidate(candidate, baseline.Signer, lease);
+                    lease = null;
+                    return accepted;
+                }
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
             {
-                _diagnostics.Write("locator", $"Trusted OpenAI helper accepted ({signer})");
-                return new CodexExecutableCandidate(candidate, signer);
+            }
+            finally
+            {
+                lease?.Dispose();
             }
         }
 
@@ -58,12 +127,10 @@ internal sealed class WindowsCodexExecutableLocator
 
     private bool TryGetRunningCodexIdentity(
         CancellationToken cancellationToken,
-        out string thumbprint,
-        out string packageRoot,
+        out OfficialCodexPackageIdentity? identity,
         out string failure)
     {
-        thumbprint = string.Empty;
-        packageRoot = string.Empty;
+        identity = null;
         failure = "Official OpenAI desktop package process unavailable";
         var processes = _findOfficial(cancellationToken);
         try
@@ -75,11 +142,17 @@ internal sealed class WindowsCodexExecutableLocator
                 cancellationToken.ThrowIfCancellationRequested();
                 try
                 {
-                    var executable = process.MainModule?.FileName;
+                    var executable = _readExecutablePath(process);
                     if (string.IsNullOrWhiteSpace(executable) ||
-                        !AuthenticodePolicy.TryVerify(executable, out _, out thumbprint)) continue;
-                    failure = "Official OpenAI package root unavailable";
-                    if (!TryResolveProtectedPackageRoot(executable, out packageRoot)) continue;
+                        !_readPackageIdentity(process.Id, out var candidateIdentity) ||
+                        candidateIdentity is null ||
+                        !IsPathWithinRoot(candidateIdentity.InstallPath, executable))
+                    {
+                        failure = "Official OpenAI package identity or install path unavailable";
+                        continue;
+                    }
+
+                    identity = candidateIdentity;
                     return true;
                 }
                 catch (Exception error) when (error is Win32Exception or InvalidOperationException)
@@ -94,43 +167,91 @@ internal sealed class WindowsCodexExecutableLocator
         return false;
     }
 
-    private static bool TryResolveProtectedPackageRoot(string processExecutable, out string packageRoot)
+    private sealed record PackageHelperBaseline(string Signer, byte[] Hash);
+
+    private bool TryGetPackageHelperBaseline(string packageRoot, out PackageHelperBaseline baseline)
     {
-        packageRoot = string.Empty;
-        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-        if (string.IsNullOrWhiteSpace(programFiles)) return false;
-        var windowsApps = Path.GetFullPath(Path.Combine(programFiles, "WindowsApps"))
-            .TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var executable = Path.GetFullPath(processExecutable);
-        if (!executable.StartsWith(windowsApps, StringComparison.OrdinalIgnoreCase)) return false;
-        var relative = executable[windowsApps.Length..];
-        var separator = relative.IndexOf(Path.DirectorySeparatorChar);
-        if (separator <= 0) return false;
-        var packageDirectory = relative[..separator];
-        if (!packageDirectory.StartsWith("OpenAI.Codex_", StringComparison.Ordinal)) return false;
-        packageRoot = Path.Combine(windowsApps, packageDirectory);
-        return Directory.Exists(packageRoot) && !IsReparsePoint(packageRoot);
+        baseline = null!;
+        foreach (var helper in EnumeratePackageHelpers(packageRoot))
+        {
+            if (!IsSafeRegularFileWithinRoot(packageRoot, helper)) continue;
+            var signature = _verifyAuthenticode(helper);
+            if (signature is null) continue;
+            try
+            {
+                using var stream = new FileStream(
+                    helper,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read,
+                    bufferSize: 65_536,
+                    FileOptions.SequentialScan);
+                baseline = new PackageHelperBaseline(signature.Signer, SHA256.HashData(stream));
+                return true;
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+        return false;
     }
 
-    private static IEnumerable<string> EnumerateCandidates(string packageRoot)
+    private static IEnumerable<string> EnumeratePackageHelpers(string packageRoot)
     {
-        var candidates = new[]
+        yield return Path.Combine(packageRoot, "app", "resources", "codex.exe");
+        yield return Path.Combine(packageRoot, "resources", "codex.exe");
+    }
+
+    private IEnumerable<string> EnumerateRuntimeCandidates()
+    {
+        var root = GetRuntimeRoot();
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root) || IsReparsePoint(root))
         {
-            Path.Combine(packageRoot, "app", "resources", "codex.exe"),
-            Path.Combine(packageRoot, "resources", "codex.exe"),
-        };
-        foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+            yield break;
+        }
+
+        IEnumerable<string> directories;
+        try
         {
-            yield return candidate;
+            directories = Directory.EnumerateDirectories(root, "*", SearchOption.TopDirectoryOnly)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            yield break;
+        }
+
+        foreach (var directory in directories)
+        {
+            yield return Path.Combine(directory, "codex.exe");
         }
     }
 
-    private static bool IsSafeRegularFile(string path)
+    private string GetRuntimeRoot() => Path.Combine(_localAppData, "OpenAI", "Codex", "bin");
+
+    internal static bool IsPathWithinRoot(string root, string path)
     {
         try
         {
+            var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var fullPath = Path.GetFullPath(path);
-            if (!File.Exists(fullPath) || IsReparsePoint(fullPath))
+            if (fullPath.Equals(fullRoot, StringComparison.OrdinalIgnoreCase)) return true;
+            return fullPath.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsSafeRegularFileWithinRoot(string root, string path)
+    {
+        try
+        {
+            var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var fullPath = Path.GetFullPath(path);
+            if (!IsPathWithinRoot(fullRoot, fullPath) || !File.Exists(fullPath) || IsReparsePoint(fullPath))
             {
                 return false;
             }
@@ -141,9 +262,9 @@ internal sealed class WindowsCodexExecutableLocator
                 {
                     return false;
                 }
+                if (current.FullName.Equals(fullRoot, StringComparison.OrdinalIgnoreCase)) return true;
             }
-
-            return true;
+            return false;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
         {
@@ -154,7 +275,15 @@ internal sealed class WindowsCodexExecutableLocator
     private static bool IsReparsePoint(string path) =>
         (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
 
-    private static async Task<bool> SupportsAppServerAsync(string executable, CancellationToken cancellationToken)
+    private static bool MatchesBaseline(FileStream candidate, byte[] baselineHash)
+    {
+        candidate.Position = 0;
+        var candidateHash = SHA256.HashData(candidate);
+        candidate.Position = 0;
+        return CryptographicOperations.FixedTimeEquals(candidateHash, baselineHash);
+    }
+
+    private async Task<bool> SupportsAppServerAsync(string executable, CancellationToken cancellationToken)
     {
         using var process = new Process
         {
@@ -170,33 +299,49 @@ internal sealed class WindowsCodexExecutableLocator
         process.StartInfo.ArgumentList.Add("app-server");
         process.StartInfo.ArgumentList.Add("--help");
 
+        var started = false;
+        Task<string>? stdoutTask = null;
+        Task<string>? stderrTask = null;
         try
         {
             if (!process.Start())
             {
                 return false;
             }
+            started = true;
 
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             deadline.CancelAfter(ProbeTimeout);
-            var stdoutTask = DrainBoundedAsync(process.StandardOutput.BaseStream, deadline.Token);
-            var stderrTask = DrainBoundedAsync(process.StandardError.BaseStream, deadline.Token);
+            stdoutTask = DrainBoundedAsync(process.StandardOutput.BaseStream, deadline.Token);
+            stderrTask = DrainBoundedAsync(process.StandardError.BaseStream, deadline.Token);
             await process.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
             var output = (await stdoutTask.ConfigureAwait(false)) + (await stderrTask.ConfigureAwait(false));
             return process.ExitCode == 0 && output.Contains("stdio", StringComparison.OrdinalIgnoreCase);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            if (!process.HasExited)
-            {
-                _ = await StopOwnedProcessAsync(process).ConfigureAwait(false);
-            }
             return false;
         }
         catch (Exception error) when (error is Win32Exception or InvalidOperationException or IOException)
         {
             return false;
         }
+        finally
+        {
+            if (started && !await OwnedProcessShutdown.StopAsync(process, closeStandardInput: false).ConfigureAwait(false))
+            {
+                _diagnostics.Write("cleanup", "Capability probe exit unconfirmed");
+            }
+            await ObserveProbeDrainAsync(stdoutTask).ConfigureAwait(false);
+            await ObserveProbeDrainAsync(stderrTask).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task ObserveProbeDrainAsync(Task<string>? task)
+    {
+        if (task is null) return;
+        try { _ = await task.ConfigureAwait(false); }
+        catch (Exception error) when (error is OperationCanceledException or IOException or ObjectDisposedException) { }
     }
 
     private static async Task<string> DrainBoundedAsync(Stream stream, CancellationToken cancellationToken)
@@ -213,29 +358,15 @@ internal sealed class WindowsCodexExecutableLocator
         return Encoding.UTF8.GetString(retained.GetBuffer(), 0, checked((int)retained.Length));
     }
 
-    private static async Task<bool> StopOwnedProcessAsync(Process process)
-    {
-        try
-        {
-            if (process.HasExited) return true;
-            process.Kill(entireProcessTree: true);
-            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-            await process.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
-            return process.HasExited;
-        }
-        catch (InvalidOperationException) when (process.HasExited)
-        {
-            return true;
-        }
-        catch (Exception error) when (error is Win32Exception or OperationCanceledException)
-        {
-            return false;
-        }
-    }
 }
 
 internal static class AuthenticodePolicy
 {
+    public static AuthenticodeIdentity? Verify(string path) =>
+        TryVerify(path, out var signer, out var thumbprint)
+            ? new AuthenticodeIdentity(signer, thumbprint)
+            : null;
+
     public static bool TryVerify(string path, out string signer, out string thumbprint)
     {
         signer = "signed publisher";

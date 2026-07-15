@@ -20,10 +20,10 @@
 - **THEN** 系统仅保留低开销托盘与生命周期检测，不显示额度气泡也不启动 app-server
 
 ### Requirement: Codex 可执行文件发现与信任 Gate
-系统 MUST 只从运行中的官方 MSIX 包身份和该进程对应的系统保护 WindowsApps 包根推导固定 helper 候选。系统 MUST 拒绝任意 PATH 猜测、用户可写 mirror、递归搜索、相对路径、reparse point、超出允许根目录的文件及未通过真实性检查的候选；没有候选通过时 SHALL 安全降级为不可用，且 MUST NOT 读取、复制或保存 Codex 认证文件。
+系统 MUST 从运行中的官方 MSIX 包身份、Package Full Name 和 Windows Package API 返回的安装根推导包内固定 helper 基准，不得假设安装盘符。实际执行候选 MUST 只来自官方桌面应用同步的当前用户固定运行根，且必须在拒绝写入和替换的 lease 内与已通过真实性检查的包内基准逐字节一致。系统 MUST 拒绝任意 PATH 猜测、npm 镜像、递归搜索、相对路径、reparse point、超出允许根目录的文件及不一致候选；没有候选通过时 SHALL 安全降级为不可用，且 MUST NOT 读取、复制或保存 Codex 认证文件。
 
 #### Scenario: 可信 helper 可用
-- **WHEN** 官方 Codex 包正在运行，候选位于允许的 canonical 根目录、无 reparse point、Authenticode 验证有效且在总 deadline 内通过 app-server capability probe
+- **WHEN** 官方 Codex 包正在运行，系统 API 返回真实安装根，包内固定 helper 通过 Authenticode，官方每用户运行候选位于允许的 canonical 根目录、无 reparse point、在只读 lease 内与包内基准逐字节一致且在总 deadline 内通过 app-server capability probe
 - **THEN** 系统仅使用该绝对路径以 `UseShellExecute=false` 启动 `app-server --stdio`
 
 #### Scenario: 候选不可信或不可执行
@@ -31,8 +31,8 @@
 - **THEN** 系统拒绝执行该候选，额度状态为不可用并保留可诊断但不含账户标识的原因
 
 #### Scenario: 多个可信候选
-- **WHEN** 多个候选均通过真实性与能力检查
-- **THEN** 系统使用确定性的优先级选择官方 WindowsApps 包根内与当前宿主签名匹配的固定候选，不按文件更新时间或递归扫描结果猜测
+- **WHEN** 多个直属版本目录候选均与当前包内基准一致并通过能力检查
+- **THEN** 系统按目录名的确定性顺序选择候选，不按文件更新时间、PATH 或递归扫描结果猜测，并保持 lease 直到真实 app-server 完成 initialize
 
 ### Requirement: Windows 额度协议语义
 系统 SHALL 通过 JSONL stdio 执行 `initialize → initialized → account/rateLimits/read`，识别 300 分钟与 10080 分钟窗口，并把 `usedPercent` 转换为剩余百分比。系统 MUST 支持稀疏 `account/rateLimits/updated`、完整刷新、断线不可用、有界退避重连、有限数字校验和 1 MiB 单帧上限。
@@ -54,7 +54,7 @@
 - **THEN** 系统只终止自身创建且身份仍匹配的 app-server 进程树，并在最终期限内确认退出；无法确认时报告清理失败而不是终止无关进程
 
 ### Requirement: Windows 悬浮气泡与交互
-系统 SHALL 提供置顶、无任务栏按钮且不激活前台应用的透明悬浮窗。收起态 SHALL 为 52×52 DIP，展开态 SHALL 为 130×78 DIP，且可见材质表面 SHALL 占满该窗口边界，不得再由内部固定 margin 缩小。Windows 11 22621 及以上 SHALL 优先使用系统 Desktop Acrylic 作为背景采样层，并以动态窗口区域形成圆形/连续圆角外形；内部 SHALL 延续单一彩色气泡、固定几何内单向色流、额度语义色与紧凑两行布局，不得绘制独立彩色描边、黑色实底或外发光，并尊重 Windows 减少动画设置。
+系统 SHALL 提供置顶、无任务栏按钮且不激活前台应用的透明悬浮窗。收起态 SHALL 为 52×52 DIP，展开态 SHALL 为 130×78 DIP，且可见材质表面 SHALL 占满该窗口边界，不得再由内部固定 margin 缩小。Windows 10 SHALL 使用逐像素 Alpha 的 layered 窗口保留圆形/连续圆角抗锯齿，不得用 1-bit 窗口区域裁切替代；Windows 11 22621 及以上 SHALL 优先使用系统 Desktop Acrylic 作为背景采样层，并以动态窗口区域形成圆形/连续圆角外形。内部 SHALL 延续单一彩色气泡、固定几何内单向色流、额度语义色与紧凑两行布局，不得绘制独立彩色描边、黑色实底或外发光，并尊重 Windows 减少动画设置。
 
 #### Scenario: 系统材质与诚实降级
 - **WHEN** Windows 11 支持并成功启用 Desktop Acrylic

@@ -9,7 +9,7 @@
 - [x] 2.1 实现官方 Codex MSIX package identity 检测与缺席时低开销生命周期监控
 - [x] 2.2 实现 canonical helper locator、reparse point 拒绝、WinVerifyTrust、确定性候选优先级和有界 capability probe
 - [x] 2.3 实现 JSONL stdio app-server 客户端、完整快照、稀疏更新、安全刷新、断线不可用与有界重连
-- [ ] 2.4 实现 Process 所有权、有界退出和 Codex 启停 session coordinator，覆盖快速启停和清理失败测试
+- [x] 2.4 实现 Process 所有权、有界退出和 Codex 启停 session coordinator，覆盖快速启停和清理失败测试
 
 ## 3. Windows 悬浮气泡
 
@@ -50,3 +50,5 @@
 - [x] 7.2 将 Aurora 色场固定为覆盖最大展开矩形任意旋转角的尺寸，验证收起/展开多个相位均无左右无色底层
 - [x] 7.3 增加官方宿主迁移、错误 PFN、不可用额度与多相位渲染回归，并记录 CI 与真实 Windows 证据边界
 - [x] 7.4 以 MrPPFruit 账号创建 `v0.2.0-preview.3` Prerelease，回下载校验 Windows ZIP、SHA-256 与 UI 截图
+- [x] 7.5 以 Windows Package API 获取跨磁盘安装根，并用包内签名基准、官方每用户运行副本逐字节一致性和跨 initialize lease 修复 Store helper 启动，覆盖拒绝分支与真实额度显示
+- [x] 7.6 拒绝同一 client 并发重复启动，将 session 重试收窄到明确可恢复异常，并让发布脚本同时支持独立 restore 与 CI `-NoRestore` 路径

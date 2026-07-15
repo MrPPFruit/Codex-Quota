@@ -6,9 +6,9 @@ canonical_spec: openspec
 
 ## 实现决策
 
-- `windows/CodexQuota.Windows.sln` 包含一个无框架 Core、一个 WPF App 和一个测试工程；不引入 MVVM/DI/日志/自动更新框架。
+- `windows/CodexQuota.Windows.slnx` 包含一个无框架 Core、一个 WPF App 和一个测试工程；不引入 MVVM/DI/日志/自动更新框架。
 - Core 使用 `System.Text.Json` 与 `Process` 实现协议，App 只通过 snapshot/event 接口消费，不解析 JSON。
-- Codex presence 以 `Codex` / `ChatGPT` 为发现提示并绑定精确官方 MSIX package family；locator 只枚举对应 WindowsApps 包根内的固定候选，依次执行 canonical/reparse、WinVerifyTrust、同证书指纹和 capability probe，不使用 PATH 或用户可写 mirror。
+- Codex presence 以 `Codex` / `ChatGPT` 为发现提示并绑定精确官方 MSIX package family；locator 通过 Package Full Name 与 Windows Package API 获取可跨磁盘的真实安装根，以包内固定 helper 的 WinVerifyTrust 与 SHA-256 作为当前版本基准。实际候选只来自官方桌面应用同步的 LocalAppData 固定运行根，必须在拒绝写入和替换的 lease 内与基准逐字节一致并通过 capability probe；不使用 PATH、npm 或递归 mirror。
 - WPF HWND 使用 NOACTIVATE/TOOLWINDOW/MOUSEACTIVATE 原生策略；所有 Win32 像素在窗口边界转换为 DIP，布局纯函数可在 CI 测试。
 - 悬浮层视觉沿用单一自动适配彩色气泡。色场固定几何、相位单向旋转；窗口 180ms 形变与内容淡入淡出互斥，hover 使用 10 DIP 空间迟滞。
 - 首次从稳定路径运行时注册 HKCU Run；只管理自身 value，用户 opt-out 优先于首次启动策略。
@@ -23,7 +23,7 @@ canonical_spec: openspec
 
 ## 主要风险
 
-- WindowsApps 包内 helper 相对路径或签名不符合推断时必须不可用，不执行宽松回退；脱敏诊断用于下一 Preview 修正。
+- 包内 helper 相对路径、签名或官方每用户运行副本与当前包基准不一致时必须不可用，不复制 WindowsApps 二进制、不修改 ACL、不执行宽松回退；脱敏诊断用于下一 Preview 修正。
 - WPF 透明合成可能在部分 GPU 上有性能/锯齿差异；循环色流只在可见且未减少动画时运行。
 - 单文件体积会大于原生 Rust，但换取零运行时安装与显著更低 UI/可访问性复杂度。
 - 未签名 EXE 会触发 SmartScreen；文档不得把 SHA-256 描述为身份认证。
@@ -38,7 +38,7 @@ canonical_spec: openspec
 ## 回滚与迁移
 
 - Windows 源码位于独立目录，删除该目录与 Windows CI job 即可回滚，不修改 Swift targets。
-- 已发布 Preview 标签不覆盖；失败修复使用新的 `preview.N`。
+- 公开 Windows 修复覆盖唯一 Prerelease `v0.1.0` 的对应资产，不新增发布页。
 - 真实 Windows 验收未完成前保持 OpenSpec change 未归档，稳定 `v0.2.0` 不创建。
 
 ## 非目标

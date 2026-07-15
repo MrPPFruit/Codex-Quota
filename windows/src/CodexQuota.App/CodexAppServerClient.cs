@@ -7,17 +7,23 @@ using CodexQuota.Core;
 
 namespace CodexQuota.App;
 
-internal sealed class CodexAppServerClient : IAsyncDisposable
+internal sealed class CodexAppServerClient : IUsageSession
 {
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan BackgroundShutdownTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan DefaultCalibrationInterval = TimeSpan.FromSeconds(120);
     private readonly string _executable;
+    private CodexExecutableCandidate? _candidate;
     private readonly BoundedDiagnosticLog _diagnostics;
+    private readonly TimeSpan _calibrationInterval;
     private readonly ConcurrentDictionary<int, TaskCompletionSource<JsonElement>> _pending = new();
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
+    private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly UsagePayloadState _usageState = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly TaskCompletionSource _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly object _disposeGate = new();
     private Process? _process;
     private Task? _readerTask;
     private Task? _stderrTask;
@@ -25,17 +31,52 @@ internal sealed class CodexAppServerClient : IAsyncDisposable
     private int _closed;
     private readonly object _refreshTaskGate = new();
     private Task? _refreshTask;
+    private Task? _calibrationTask;
+    private Task? _disposeTask;
+    private int _startClaimed;
 
     public CodexAppServerClient(string executable, BoundedDiagnosticLog diagnostics)
+        : this(new CodexExecutableCandidate(executable, "unverified test executable"), diagnostics)
     {
-        _executable = executable;
+    }
+
+    internal CodexAppServerClient(
+        CodexExecutableCandidate candidate,
+        BoundedDiagnosticLog diagnostics,
+        TimeSpan? calibrationInterval = null)
+    {
+        var interval = calibrationInterval ?? DefaultCalibrationInterval;
+        if (interval <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(calibrationInterval));
+        _candidate = candidate;
+        _executable = candidate.Path;
         _diagnostics = diagnostics;
+        _calibrationInterval = interval;
     }
 
     public event Action<UsageSnapshot>? SnapshotChanged;
     public Task Completion => _completion.Task;
 
     public async Task<UsageSnapshot> StartAsync(CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _closed) != 0, this);
+        if (Interlocked.CompareExchange(ref _startClaimed, 1, 0) != 0)
+        {
+            throw new InvalidOperationException("Codex app-server client can only be started once");
+        }
+
+        await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _closed) != 0, this);
+            return await StartCoreAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _lifecycleGate.Release();
+        }
+    }
+
+    private async Task<UsageSnapshot> StartCoreAsync(CancellationToken cancellationToken)
     {
         var process = new Process
         {
@@ -55,24 +96,40 @@ internal sealed class CodexAppServerClient : IAsyncDisposable
         process.StartInfo.ArgumentList.Add("app-server");
         process.StartInfo.ArgumentList.Add("--stdio");
         process.Exited += OnProcessExited;
-        if (!process.Start())
+        var ownershipTransferred = false;
+        try
         {
-            throw new InvalidOperationException("Codex app-server failed to start");
+            if (!process.Start())
+            {
+                throw new InvalidOperationException("Codex app-server failed to start");
+            }
+
+            _process = process;
+            ownershipTransferred = true;
+            _readerTask = ReadLoopAsync(process, _lifetime.Token);
+            _stderrTask = DrainAsync(process.StandardError.BaseStream, _lifetime.Token);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
+            linked.CancelAfter(RequestTimeout);
+
+            _ = await RequestAsync("initialize", new
+            {
+                clientInfo = new { name = "codex-quota", title = "Codex Quota", version = "0.2.0" },
+                capabilities = new { },
+            }, linked.Token).ConfigureAwait(false);
+            await NotifyAsync("initialized", new { }, linked.Token).ConfigureAwait(false);
+            var snapshot = await RefreshAsync(linked.Token).ConfigureAwait(false);
+            ReleaseExecutionLease();
+            StartCalibrationLoop();
+            return snapshot;
         }
-
-        _process = process;
-        _readerTask = ReadLoopAsync(process, _lifetime.Token);
-        _stderrTask = DrainAsync(process.StandardError.BaseStream, _lifetime.Token);
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
-        linked.CancelAfter(RequestTimeout);
-
-        _ = await RequestAsync("initialize", new
+        finally
         {
-            clientInfo = new { name = "codex-quota", title = "Codex Quota", version = "0.2.0" },
-            capabilities = new { },
-        }, linked.Token).ConfigureAwait(false);
-        await NotifyAsync("initialized", new { }, linked.Token).ConfigureAwait(false);
-        return await RefreshAsync(linked.Token).ConfigureAwait(false);
+            if (!ownershipTransferred)
+            {
+                process.Exited -= OnProcessExited;
+                process.Dispose();
+            }
+        }
     }
 
     private async Task<UsageSnapshot> RefreshAsync(CancellationToken cancellationToken)
@@ -240,9 +297,41 @@ internal sealed class CodexAppServerClient : IAsyncDisposable
                 }
                 catch (Exception error) when (error is OperationCanceledException or InvalidDataException or IOException or TimeoutException)
                 {
-                    Publish(UsageSnapshot.Unavailable);
+                    if (!(_lifetime.IsCancellationRequested && error is OperationCanceledException))
+                    {
+                        _usageState.ClearAndPublish(Publish);
+                    }
                 }
             });
+        }
+    }
+
+    private void StartCalibrationLoop()
+    {
+        lock (_refreshTaskGate)
+        {
+            if (Volatile.Read(ref _closed) != 0 || _calibrationTask is { IsCompleted: false }) return;
+            _calibrationTask = CalibrateAsync();
+        }
+    }
+
+    private async Task CalibrateAsync()
+    {
+        while (!_lifetime.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(_calibrationInterval, _lifetime.Token).ConfigureAwait(false);
+                await RefreshAsync(_lifetime.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception error) when (error is InvalidDataException or IOException or TimeoutException or OperationCanceledException)
+            {
+                _usageState.ClearAndPublish(Publish);
+            }
         }
     }
 
@@ -275,51 +364,114 @@ internal sealed class CodexAppServerClient : IAsyncDisposable
         }
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _closed, 1) != 0)
+        lock (_disposeGate)
         {
-            return;
+            _disposeTask ??= DisposeCoreAsync();
+            return new ValueTask(_disposeTask);
         }
+    }
 
+    private async Task DisposeCoreAsync()
+    {
+        Interlocked.Exchange(ref _closed, 1);
         _lifetime.Cancel();
         _completion.TrySetResult();
         Task? refreshTask;
-        lock (_refreshTaskGate) refreshTask = _refreshTask;
-        var process = _process;
+        Task? calibrationTask;
+        await _lifecycleGate.WaitAsync().ConfigureAwait(false);
+        Process? process;
+        try
+        {
+            process = Interlocked.Exchange(ref _process, null);
+        }
+        finally
+        {
+            _lifecycleGate.Release();
+        }
+        lock (_refreshTaskGate)
+        {
+            refreshTask = _refreshTask;
+            calibrationTask = _calibrationTask;
+        }
+        var processExitConfirmed = true;
         if (process is not null)
         {
-            try { process.StandardInput.Close(); } catch (IOException) { }
-            if (!process.HasExited)
+            processExitConfirmed = false;
+            try
             {
-                using var grace = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
-                try { await process.WaitForExitAsync(grace.Token).ConfigureAwait(false); }
-                catch (OperationCanceledException)
-                {
-                    try { process.Kill(entireProcessTree: true); }
-                    catch (InvalidOperationException) when (process.HasExited) { }
-                    using var killDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-                    await process.WaitForExitAsync(killDeadline.Token).ConfigureAwait(false);
-                }
+                processExitConfirmed = await OwnedProcessShutdown.StopAsync(
+                    process,
+                    closeStandardInput: true).ConfigureAwait(false);
             }
-            process.Exited -= OnProcessExited;
-            process.Dispose();
+            catch (Exception error)
+            {
+                _diagnostics.Write("cleanup", error.GetType().Name);
+            }
+            finally
+            {
+                process.Exited -= OnProcessExited;
+                try { process.StandardOutput.Close(); }
+                catch (Exception error) when (error is IOException or InvalidOperationException or ObjectDisposedException) { }
+                try { process.StandardError.Close(); }
+                catch (Exception error) when (error is IOException or InvalidOperationException or ObjectDisposedException) { }
+                process.Dispose();
+            }
         }
-        if (_readerTask is not null)
+        ReleaseExecutionLease();
+
+        var backgroundTasks = new[] { _readerTask, _stderrTask, refreshTask, calibrationTask }
+            .Where(task => task is not null)
+            .Select(task => ObserveShutdownTaskAsync(task!))
+            .ToArray();
+        var backgroundStopped = true;
+        Exception? backgroundFailure = null;
+        if (backgroundTasks.Length > 0)
         {
-            try { await _readerTask.ConfigureAwait(false); } catch (OperationCanceledException) { }
+            using var deadline = new CancellationTokenSource(BackgroundShutdownTimeout);
+            try
+            {
+                await Task.WhenAll(backgroundTasks).WaitAsync(deadline.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+            {
+                backgroundStopped = false;
+            }
+            catch (Exception error)
+            {
+                backgroundFailure = error;
+            }
         }
-        if (_stderrTask is not null)
+
+        if (backgroundStopped)
         {
-            try { await _stderrTask.ConfigureAwait(false); } catch (OperationCanceledException) { }
+            _writeGate.Dispose();
+            _refreshGate.Dispose();
+            _lifetime.Dispose();
         }
-        if (refreshTask is not null)
+
+        if (!processExitConfirmed || !backgroundStopped)
         {
-            using var refreshDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-            await refreshTask.WaitAsync(refreshDeadline.Token).ConfigureAwait(false);
+            throw new SessionCleanupUnconfirmedException(
+                !processExitConfirmed
+                    ? "Owned app-server exit could not be confirmed"
+                    : "App-server background cleanup did not complete");
         }
-        _writeGate.Dispose();
-        _refreshGate.Dispose();
-        _lifetime.Dispose();
+
+        if (backgroundFailure is not null)
+        {
+            throw new IOException("App-server background cleanup failed", backgroundFailure);
+        }
+    }
+
+    private void ReleaseExecutionLease() => Interlocked.Exchange(ref _candidate, null)?.Dispose();
+
+    private static async Task ObserveShutdownTaskAsync(Task task)
+    {
+        try { await task.ConfigureAwait(false); }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+        catch (IOException) { }
     }
 }

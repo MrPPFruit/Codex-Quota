@@ -42,6 +42,17 @@ public sealed class UsagePayloadState
         }
     }
 
+    public void ClearAndPublish(Action<UsageSnapshot> publish)
+    {
+        ArgumentNullException.ThrowIfNull(publish);
+        lock (_gate)
+        {
+            _payload = null;
+            _revision++;
+            publish(UsageSnapshot.Unavailable);
+        }
+    }
+
     public PatchApplication Apply(RateLimitPatch patch)
     {
         lock (_gate)

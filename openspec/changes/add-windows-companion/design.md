@@ -33,23 +33,23 @@ Windows 首版需要让用户下载后参与真实设备验证；开发环境与
 
 ### 3. locator 先绑定官方包，再验证少量 helper
 
-生命周期检测以固定的 `Codex` / `ChatGPT` 名称作为低成本发现提示，再使用 Win32 package identity API 确认运行中的 package family 精确等于 `OpenAI.Codex_2p2nqsd0c76g0`。名称不参与信任判断。helper 候选仅来自该运行进程对应的 `Program Files\WindowsApps\OpenAI.Codex_*` canonical 包根中的两个固定相对路径；拒绝 reparse point、目录逃逸、递归搜索和 PATH 回退。候选必须通过 WinVerifyTrust、与宿主相同证书指纹、能力探针和总 deadline 后才能执行。
+生命周期检测以固定的 `Codex` / `ChatGPT` 名称作为低成本发现提示，再使用 Win32 package identity API 确认运行中的 package family 精确等于 `OpenAI.Codex_2p2nqsd0c76g0`。名称不参与信任判断。系统从该进程取得 Package Full Name，并用 `GetPackagePathByFullName2(PackagePathType_Install)` 查询真实安装根；不得假设包位于系统盘或固定 `Program Files\WindowsApps` 路径。宿主路径必须位于系统返回的安装根中。
 
-首个 Preview 不猜写固定 signer subject；代码从同一个已验证官方包进程取得证书指纹，并要求 helper 匹配后 fail closed。真实 Windows probe 用于确认官方当前 package root、helper 相对路径和 app-server 行为；不执行用户可写 mirror，也不直接执行 `ChatGPT.exe`。
+包内固定 `app/resources/codex.exe` 仅作为不可执行的当前版本信任基准：必须通过 WinVerifyTrust，并计算 SHA-256。WindowsApps 的包外直接执行会被系统拒绝，因此实际候选仅来自官方桌面应用同步的 `%LOCALAPPDATA%\OpenAI\Codex\bin\<version>\codex.exe`。locator 只枚举固定根的直属版本目录，先用拒绝写入和删除的只读 lease 打开候选，再在该 lease 生命周期内完成 reparse/canonical 检查、与包内基准逐字节哈希一致性检查、能力探针、真实 app-server 启动和 initialize；不接受 PATH、npm、递归搜索或任意用户可写 mirror。该模型保证执行内容与当前受保护包基准一致，但不宣称防御已在同一用户权限下运行的恶意进程。
 
 ### 4. 单连接生命周期与有界清理
 
-一个后台 coordinator 管理 `Codex presence → locator → app-server connection → snapshots → overlay`。每次连接独占 Process 和 generation；断线先发布 unavailable，再有界退避重连。退出只操作自身持有的 Process 对象与其仍匹配的进程树；清理未确认时不报告成功。
+一个后台 coordinator 管理 `Codex presence → locator → app-server connection → snapshots → overlay`。每次连接独占 Process 和 generation；单个 client 只能启动一次，释放会先取消启动过渡，再由唯一清理所有者接管已登记的 Process。断线先发布 unavailable，再对文件、Win32、超时和内部取消等明确可恢复故障有界退避；未知编程异常结束当前 generation，不伪装成网络抖动无限重试。退出只操作自身持有的 Process 对象与其仍匹配的进程树；清理未确认时不报告成功。
 
 ### 5. 使用 Win32 无激活窗口策略和空间迟滞
 
-WPF Window 使用 `WindowStyle=None`、`AllowsTransparency=False`、`ShowInTaskbar=false` 的非 layered HWND，创建后设置 `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`，处理 `WM_MOUSEACTIVATE → MA_NOACTIVATE`。`WM_NCHITTEST` 只负责让窗口区域外返回 `HTTRANSPARENT`；形状内统一由 WPF `DragMove()` 拥有拖动生命周期，避免原生 non-client drag 与动画中断形成双重所有者。
+WPF Window 在首次创建 HWND 前按系统版本选择合成模式：Windows 10 使用 `WindowStyle=None`、`AllowsTransparency=True` 的 layered HWND，让 WPF `Clip` 的逐像素 Alpha 保留圆角抗锯齿；Windows 11 22621 及以上使用 `AllowsTransparency=False` 的非 layered HWND，为 Desktop Acrylic 保留 DWM 背景采样能力。两种模式均使用 `ShowInTaskbar=false`，创建后设置 `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`，处理 `WM_MOUSEACTIVATE → MA_NOACTIVATE`。`WM_NCHITTEST` 只负责让轮廓外返回 `HTTRANSPARENT`；形状内统一由 WPF `DragMove()` 拥有拖动生命周期，避免原生 non-client drag 与动画中断形成双重所有者。
 
 几何仅由 180ms 窗口过渡驱动；内容先淡出后淡入并裁切在实时轮廓内。hover 保持区复用 macOS 已验证的“入口 frame ∪ 展开 frame + 10 DIP”，避免屏幕边缘振荡。循环色流固定中心和尺寸，只旋转颜色相位；Reduce Motion 时移除动画时钟。
 
-Windows 11 22621 及以上优先使用 DWM `DWMSBT_TRANSIENTWINDOW` 提供系统 Desktop Acrylic，并以 `SetWindowRgn` 按实时 DPI 把非 layered HWND 裁切为当前圆形或连续圆角矩形；内部 WPF 仅绘制与 macOS 同构的半透明白层、固定中心的连续二维柔光色场和文字，不再绘制独立彩色描边、黑色实底或外发光。色场使用相互重叠的高斯柔光团生成，不使用会留下扇区分界的角向分段插值；动画只旋转固定尺寸色场，不随 hover 形变重新缩放。DWM 材质初始化失败时使用同一内容表面的不透明中性浅色降级，不回退到霓虹卡片视觉。
+Windows 10 不再使用 1-bit `SetWindowRgn` 裁切圆角，而由 layered HWND 直接合成 WPF 逐像素 Alpha；Windows 11 22621 及以上优先使用 DWM `DWMSBT_TRANSIENTWINDOW` 提供系统 Desktop Acrylic，并以 `SetWindowRgn` 按实时 DPI 把非 layered HWND 裁切为当前圆形或连续圆角矩形。内部 WPF 仅绘制与 macOS 同构的半透明白层、固定中心的连续二维柔光色场和文字，不再绘制独立彩色描边、黑色实底或外发光。色场复用 macOS `soft` 预设的青、蓝、紫、粉角向顺序，并在生成阶段完成中心漫射和二维模糊，消除角向渐变在中心汇聚形成的硬扇区；乳白底与静态照明保持独立，不参与 10 秒色场旋转。动画只旋转固定尺寸色场，不随 hover 形变重新缩放。DWM 材质初始化失败时使用同一内容表面的不透明中性浅色降级，不回退到霓虹卡片视觉。
 
-为避免把离屏渲染误当作桌面合成证据，WPF 内容提取为无窗口依赖的 `OverlaySurface`。Windows runner 可在 STA 中固定额度、展开状态、色流相位和 Reduce Motion 后输出 52×52 与 130×78 PNG，用于验证尺寸、透明角、排版、语义色和无独立外圈；系统 Acrylic 的背景采样、窗口区域、非激活、拖动和动画只能由真实 Windows 11 桌面验证。
+为避免把离屏渲染误当作桌面合成证据，WPF 内容提取为无窗口依赖的 `OverlaySurface`。Windows runner 可在 STA 中固定额度、展开状态、色流相位和 Reduce Motion 后输出 52×52 与 130×78 PNG，用于验证尺寸、透明角、排版、语义色和无独立外圈；Windows 10 layered 边缘与 Windows 11 Acrylic 的背景采样、窗口区域、非激活、拖动和动画仍需分别由对应真实桌面验证。
 
 ### 6. PerMonitorV2 与中心锚点持久化
 
