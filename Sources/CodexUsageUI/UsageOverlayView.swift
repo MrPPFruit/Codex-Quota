@@ -249,23 +249,40 @@ public struct UsageOverlayView: View {
     }
 
     private func percentageText(_ window: UsageWindow, level: UsageSemanticLevel, size: CGFloat) -> some View {
-        let isAvailable = level != .unavailable
         return Text(UsageVisibleQuotaText.make(for: window))
             .font(QuotaNumberFont.font(size: size))
             .foregroundStyle(textColor(for: level))
             .lineLimit(1)
             .minimumScaleFactor(0.86)
             .shadow(
-                color: isAvailable ? outlineColor(for: level).opacity(0.42) : .clear,
-                radius: isAvailable ? 0.45 : 0,
-                x: 0,
+                color: digitContrastEdge,
+                radius: 0,
+                x: -0.65,
                 y: 0
             )
             .shadow(
-                color: isAvailable ? neutralPrimary.opacity(0.16) : .clear,
-                radius: isAvailable ? 0.7 : 0,
+                color: digitContrastEdge,
+                radius: 0,
+                x: 0.65,
+                y: 0
+            )
+            .shadow(
+                color: digitContrastEdge,
+                radius: 0,
                 x: 0,
-                y: isAvailable ? 0.4 : 0
+                y: -0.65
+            )
+            .shadow(
+                color: digitContrastEdge,
+                radius: 0,
+                x: 0,
+                y: 0.65
+            )
+            .shadow(
+                color: digitContrastShadow,
+                radius: 1.1,
+                x: 0,
+                y: 0.6
             )
     }
 
@@ -279,22 +296,20 @@ public struct UsageOverlayView: View {
         }
     }
 
-    private func outlineColor(for level: UsageSemanticLevel) -> Color {
-        switch level {
-        case .sufficient: Color(red: 0.03, green: 0.50, blue: 0.45)
-        case .attention: Color(red: 0.60, green: 0.38, blue: 0.00)
-        case .urgent: Color(red: 0.77, green: 0.24, blue: 0.31)
-        case .unavailable: neutralSecondary
-        @unknown default: level.color
-        }
-    }
-
     private var neutralPrimary: Color {
         Color(red: 0.10, green: 0.11, blue: 0.15).opacity(0.92)
     }
 
     private var neutralSecondary: Color {
         Color(red: 0.18, green: 0.20, blue: 0.27).opacity(0.68)
+    }
+
+    private var digitContrastEdge: Color {
+        Color(red: 0.02, green: 0.03, blue: 0.06).opacity(0.20)
+    }
+
+    private var digitContrastShadow: Color {
+        Color.black.opacity(0.30)
     }
 
     private var motionIsReduced: Bool { reduceMotionOverride ?? reduceMotion }
