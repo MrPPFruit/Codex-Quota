@@ -305,7 +305,7 @@ public struct UsageOverlayView: View {
     }
 
     private var digitContrastEdge: Color {
-        Color(red: 0.02, green: 0.03, blue: 0.06).opacity(0.20)
+        Color(red: 0.02, green: 0.03, blue: 0.06).opacity(0.10)
     }
 
     private var digitContrastShadow: Color {
