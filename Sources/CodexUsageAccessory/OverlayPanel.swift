@@ -72,6 +72,12 @@ public struct OverlayPanelMoveClassifier: Sendable {
 
 @MainActor
 public final class OverlayPanel: NSPanel, NSWindowDelegate {
+    public static let spaceCollectionBehavior: NSWindow.CollectionBehavior = [
+        .transient,
+        .canJoinAllSpaces,
+        .fullScreenAuxiliary,
+    ]
+
     public var onUserMove: ((NSRect) -> Void)?
     public var contextMenuProvider: (() -> NSMenu?)?
     private var moveClassifier = OverlayPanelMoveClassifier()
@@ -91,7 +97,7 @@ public final class OverlayPanel: NSPanel, NSWindowDelegate {
         hidesOnDeactivate = policy.hidesOnDeactivate
         isMovable = policy.isMovable
         isMovableByWindowBackground = policy.isMovableByWindowBackground
-        collectionBehavior = [.transient]
+        collectionBehavior = Self.spaceCollectionBehavior
         delegate = self
     }
 

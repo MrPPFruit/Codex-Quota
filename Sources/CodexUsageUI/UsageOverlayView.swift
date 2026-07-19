@@ -195,12 +195,14 @@ public struct UsageOverlayView: View {
     }
 
     private func collapsed(_ presentation: CollapsedUsagePresentation) -> some View {
-        VStack(spacing: 1) {
-            percentageText(presentation.window, level: presentation.semanticLevel, size: 17)
+        VStack(spacing: 3) {
+            percentageText(presentation.window, level: presentation.semanticLevel, size: 19)
+                .offset(y: 2)
             Text(presentation.compactLabel)
                 .font(.system(size: 9.5, weight: .medium))
                 .foregroundStyle(neutralSecondary)
         }
+        .offset(y: 3)
         .padding(.horizontal, 5)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(presentation.accessibilityLabel)
@@ -249,41 +251,48 @@ public struct UsageOverlayView: View {
     }
 
     private func percentageText(_ window: UsageWindow, level: UsageSemanticLevel, size: CGFloat) -> some View {
-        let isAvailable = level != .unavailable
         return Text(UsageVisibleQuotaText.make(for: window))
             .font(QuotaNumberFont.font(size: size))
             .foregroundStyle(textColor(for: level))
             .lineLimit(1)
             .minimumScaleFactor(0.86)
             .shadow(
-                color: isAvailable ? outlineColor(for: level).opacity(0.42) : .clear,
-                radius: isAvailable ? 0.45 : 0,
-                x: 0,
+                color: digitContrastEdge,
+                radius: 0,
+                x: -0.65,
                 y: 0
             )
             .shadow(
-                color: isAvailable ? neutralPrimary.opacity(0.16) : .clear,
-                radius: isAvailable ? 0.7 : 0,
+                color: digitContrastEdge,
+                radius: 0,
+                x: 0.65,
+                y: 0
+            )
+            .shadow(
+                color: digitContrastEdge,
+                radius: 0,
                 x: 0,
-                y: isAvailable ? 0.4 : 0
+                y: -0.65
+            )
+            .shadow(
+                color: digitContrastEdge,
+                radius: 0,
+                x: 0,
+                y: 0.65
+            )
+            .shadow(
+                color: digitContrastShadow,
+                radius: 1.1,
+                x: 0,
+                y: 0.6
             )
     }
 
     private func textColor(for level: UsageSemanticLevel) -> Color {
         switch level {
-        case .sufficient: Color(red: 69.0 / 255.0, green: 224.0 / 255.0, blue: 138.0 / 255.0)
-        case .attention: Color(red: 1.0, green: 196.0 / 255.0, blue: 90.0 / 255.0)
-        case .urgent: Color(red: 1.0, green: 107.0 / 255.0, blue: 120.0 / 255.0)
-        case .unavailable: neutralSecondary
-        @unknown default: level.color
-        }
-    }
-
-    private func outlineColor(for level: UsageSemanticLevel) -> Color {
-        switch level {
-        case .sufficient: Color(red: 0.03, green: 0.50, blue: 0.45)
-        case .attention: Color(red: 0.60, green: 0.38, blue: 0.00)
-        case .urgent: Color(red: 0.77, green: 0.24, blue: 0.31)
+        case .sufficient: Color(red: 65.0 / 255.0, green: 199.0 / 255.0, blue: 89.0 / 255.0)
+        case .attention: Color(red: 249.0 / 255.0, green: 200.0 / 255.0, blue: 0.0)
+        case .urgent: Color(red: 244.0 / 255.0, green: 92.0 / 255.0, blue: 95.0 / 255.0)
         case .unavailable: neutralSecondary
         @unknown default: level.color
         }
@@ -295,6 +304,14 @@ public struct UsageOverlayView: View {
 
     private var neutralSecondary: Color {
         Color(red: 0.18, green: 0.20, blue: 0.27).opacity(0.68)
+    }
+
+    private var digitContrastEdge: Color {
+        Color(red: 0.02, green: 0.03, blue: 0.06).opacity(0.10)
+    }
+
+    private var digitContrastShadow: Color {
+        Color.black.opacity(0.30)
     }
 
     private var motionIsReduced: Bool { reduceMotionOverride ?? reduceMotion }

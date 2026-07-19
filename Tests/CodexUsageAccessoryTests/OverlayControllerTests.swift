@@ -4,6 +4,7 @@ import CodexUsageCore
 import CodexUsageUI
 import Testing
 
+@MainActor
 @Test func overlayWindowPolicyNeverActivates() {
     let policy = OverlayWindowPolicy.standard
 
@@ -14,6 +15,8 @@ import Testing
     #expect(policy.hidesOnDeactivate == false)
     #expect(policy.isMovable)
     #expect(policy.isMovableByWindowBackground)
+    #expect(OverlayPanel.spaceCollectionBehavior.contains(.canJoinAllSpaces))
+    #expect(OverlayPanel.spaceCollectionBehavior.contains(.fullScreenAuxiliary))
 }
 
 @Test func panelMoveClassifierSuppressesOnlyMatchingProgrammaticMove() {

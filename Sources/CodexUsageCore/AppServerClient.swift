@@ -205,6 +205,7 @@ public actor AppServerClient: UsageStreamingClient {
     private let transportFactory: @Sendable () -> any AppServerTransport
     private var transport: (any AppServerTransport)?
     private let deadline: Duration
+    private let initialReadDeadline: Duration
     private let calibrationInterval: Duration
     private var decoder: JSONRPCLineDecoder
     private var nextID = 1
@@ -227,12 +228,14 @@ public actor AppServerClient: UsageStreamingClient {
         executable: URL,
         transportFactory: @escaping @Sendable () -> any AppServerTransport = { ProcessTransport() },
         deadline: Duration = .seconds(10),
+        initialReadDeadline: Duration = .seconds(30),
         calibrationInterval: Duration = .seconds(120),
         maximumFrameBytes: Int = 1_048_576
     ) {
         self.executable = executable
         self.transportFactory = transportFactory
         self.deadline = deadline
+        self.initialReadDeadline = initialReadDeadline
         self.calibrationInterval = calibrationInterval
         self.decoder = JSONRPCLineDecoder(maximumFrameBytes: maximumFrameBytes)
     }
@@ -343,12 +346,12 @@ public actor AppServerClient: UsageStreamingClient {
         transport = candidate
         generation += 1
         let connectionGeneration = generation
-        let operationDeadline = ContinuousClock().now.advanced(by: deadline)
+        let operationDeadline = ContinuousClock().now.advanced(by: initialReadDeadline)
         currentPayload = nil
         currentSnapshot = .unavailable
         decoder.reset()
-        let deadlineTask = Task { [deadline] in
-            try? await Task.sleep(for: deadline)
+        let deadlineTask = Task { [initialReadDeadline] in
+            try? await Task.sleep(for: initialReadDeadline)
             guard !Task.isCancelled else { return }
             await self.expire(generation: connectionGeneration)
         }
