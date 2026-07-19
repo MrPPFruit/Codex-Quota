@@ -1,0 +1,12 @@
+workflow: hotfix
+phase: archive
+build_mode: direct
+isolation: branch
+verify_mode: light
+design_doc: null
+plan: null
+verify_result: pass
+verification_report: docs/comet/reports/2026-07-19-keep-overlay-visible-across-spaces-verify.md
+branch_status: handled
+verified_at: 2026-07-19
+archived: true
