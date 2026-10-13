@@ -17,7 +17,9 @@ public protocol CodexInstallationInspecting: Sendable {
 
 public struct CodexExecutableLocator: Sendable {
     public static let applicationURL = URL(fileURLWithPath: "/Applications/ChatGPT.app", isDirectory: true)
-    public static let executableURL = applicationURL.appending(path: "Contents/Resources/codex")
+    public static let executableURL = applicationURL.appending(path: "Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex")
+    public static let legacyExecutableURL = applicationURL.appending(path: "Contents/Resources/codex")
+    private static let supportedExecutableURLs = [executableURL, legacyExecutableURL]
     private let inspector: any CodexInstallationInspecting
 
     public init(inspector: any CodexInstallationInspecting = SystemCodexInstallationInspector()) {
@@ -28,17 +30,20 @@ public struct CodexExecutableLocator: Sendable {
         guard inspector.bundleIdentifier(at: Self.applicationURL) == "com.openai.codex" else {
             throw CodexExecutableLocatorError.invalidBundleIdentity
         }
-        guard inspector.isExecutableFile(at: Self.executableURL) else {
-            throw CodexExecutableLocatorError.unsupportedInstallation
+        var foundExecutable = false
+        for executableURL in Self.supportedExecutableURLs {
+            guard inspector.isExecutableFile(at: executableURL) else { continue }
+            foundExecutable = true
+            guard inspector.isCanonicalTrustedInstallation(applicationURL: Self.applicationURL, executableURL: executableURL),
+                  inspector.hasValidCodexSignature(applicationURL: Self.applicationURL) else {
+                throw CodexExecutableLocatorError.invalidBundleIdentity
+            }
+            if await inspector.supportsAppServer(executableURL: executableURL) {
+                return executableURL
+            }
         }
-        guard inspector.isCanonicalTrustedInstallation(applicationURL: Self.applicationURL, executableURL: Self.executableURL),
-              inspector.hasValidCodexSignature(applicationURL: Self.applicationURL) else {
-            throw CodexExecutableLocatorError.invalidBundleIdentity
-        }
-        guard await inspector.supportsAppServer(executableURL: Self.executableURL) else {
-            throw CodexExecutableLocatorError.missingAppServerCapability
-        }
-        return Self.executableURL
+        guard foundExecutable else { throw CodexExecutableLocatorError.unsupportedInstallation }
+        throw CodexExecutableLocatorError.missingAppServerCapability
     }
 }
 
