@@ -339,34 +339,70 @@ import Testing
 }
 
 @MainActor
-@Test func cleanupFailureBlocksReplacementSession() async throws {
+@Test func cleanupFailureRetriesBeforeReplacementSession() async throws {
     let failingClient = LifecycleUsageClient(blocksClose: false, closeFailures: 1)
     let replacement = LifecycleUsageClient(blocksClose: false)
     let factory = LifecycleSessionFactory(clients: [failingClient, replacement])
+    let retryGate = LifecycleFactoryGate()
     let overlay = OverlayController(
         window: LifecycleOverlayWindowSpy(),
         visibleFrames: { [CGRect(x: 0, y: 0, width: 800, height: 600)] },
         startsMonitoring: false
     )
+    let store = UsageStore()
     let coordinator = AccessoryLifecycleCoordinator(
-        store: UsageStore(),
+        store: store,
         overlayController: overlay,
-        sessionFactory: { publish in factory.make(publish: publish) }
+        sessionFactory: { publish in factory.make(publish: publish) },
+        retryDelay: { _ in await retryGate.wait() }
     )
 
     coordinator.setCodexRunning(true)
     try await eventuallyLifecycle { coordinator.phase == .running }
     coordinator.setCodexRunning(false)
     try await eventuallyLifecycle { coordinator.phase == .degraded }
+    try await eventuallyLifecycle { await retryGate.entered }
     coordinator.setCodexRunning(true)
-    try await Task.sleep(for: .milliseconds(20))
 
     #expect(factory.createdCount == 1)
-    #expect(coordinator.phase == .degraded)
+    #expect(store.snapshot == .unavailable)
+
+    await retryGate.release()
+    try await eventuallyLifecycle { factory.createdCount == 2 && coordinator.phase == .running }
+    #expect(await failingClient.closeCount == 2)
 
     try await coordinator.shutdownForQuit()
     #expect(coordinator.phase == .idle)
-    #expect(await failingClient.closeCount == 2)
+}
+
+@MainActor
+@Test func repeatedCleanupFailureNeverCreatesReplacementSession() async throws {
+    let failingClient = LifecycleUsageClient(blocksClose: false, closeFailures: 10)
+    let replacement = LifecycleUsageClient(blocksClose: false)
+    let factory = LifecycleSessionFactory(clients: [failingClient, replacement])
+    let coordinator = AccessoryLifecycleCoordinator(
+        store: UsageStore(),
+        overlayController: OverlayController(
+            window: LifecycleOverlayWindowSpy(),
+            visibleFrames: { [CGRect(x: 0, y: 0, width: 800, height: 600)] },
+            startsMonitoring: false
+        ),
+        sessionFactory: { publish in factory.make(publish: publish) },
+        retryDelay: { _ in try? await Task.sleep(for: .milliseconds(2)) }
+    )
+
+    coordinator.setCodexRunning(true)
+    try await eventuallyLifecycle { coordinator.phase == .running }
+    coordinator.setCodexRunning(false)
+    try await eventuallyLifecycle { await failingClient.closeCount >= 2 }
+
+    #expect(factory.createdCount == 1)
+    #expect(coordinator.phase == .degraded || coordinator.phase == .stopping)
+
+    await #expect(throws: AppServerClientError.cleanupFailure) {
+        try await coordinator.shutdownForQuit()
+    }
+    #expect(factory.createdCount == 1)
 }
 
 @MainActor
