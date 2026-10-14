@@ -2,6 +2,8 @@
 comet_change: quota-session-liveness
 role: technical-design
 canonical_spec: openspec
+archived-with: 2026-10-14-quota-session-liveness
+status: final
 ---
 
 ## 实现决策
