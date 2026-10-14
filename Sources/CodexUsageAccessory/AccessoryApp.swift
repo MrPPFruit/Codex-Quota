@@ -1,10 +1,12 @@
 import AppKit
 import CodexUsageCore
 import CodexUsageUI
+import os
 
 @main
 @MainActor
 public final class AccessoryApp: NSObject, NSApplicationDelegate {
+    private let logger = Logger(subsystem: "com.ppfruit.codex-quota", category: "accessory")
     private let store = UsageStore()
     private var overlayController: OverlayController?
     private var statusItemController: StatusItemController?
@@ -27,6 +29,7 @@ public final class AccessoryApp: NSObject, NSApplicationDelegate {
     }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
+        logger.info("accessory_launch_completed")
         let preview = AccessoryPreviewConfiguration.parse()
         let smokeConfiguration = SmokeDiagnostics.configuration()
         if let preview { store.snapshot = preview.snapshot }
@@ -73,9 +76,26 @@ public final class AccessoryApp: NSObject, NSApplicationDelegate {
                 store: store,
                 overlayController: overlay,
                 sessionFactory: { publishSnapshot in
-                    guard let executable = try? await CodexExecutableLocator().locate(), !Task.isCancelled else {
+                    let executable: URL
+                    do {
+                        executable = try await CodexExecutableLocator().locate()
+                    } catch let error as CodexExecutableLocatorError {
+                        let category: String
+                        switch error {
+                        case .unsupportedInstallation: category = "unsupported_installation"
+                        case .invalidBundleIdentity: category = "invalid_bundle_identity"
+                        case .missingAppServerCapability: category = "missing_app_server_capability"
+                        }
+                        self.logger.error("locator_failed category=\(category, privacy: .public)")
+                        return nil
+                    } catch {
+                        self.logger.error("locator_failed category=unexpected")
                         return nil
                     }
+                    guard !Task.isCancelled else {
+                        return nil
+                    }
+                    self.logger.info("locator_succeeded")
                     return AccessoryUsageSession(
                         client: AppServerClient(executable: executable),
                         publishSnapshot: publishSnapshot

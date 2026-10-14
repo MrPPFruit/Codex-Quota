@@ -1,5 +1,6 @@
 import CodexUsageCore
 import CodexUsageUI
+import os
 
 public enum AccessoryLifecyclePhase: Sendable, Equatable {
     case idle
@@ -11,6 +12,7 @@ public enum AccessoryLifecyclePhase: Sendable, Equatable {
 
 @MainActor
 public final class AccessoryLifecycleCoordinator {
+    private let logger = Logger(subsystem: "com.ppfruit.codex-quota", category: "lifecycle")
     public typealias SessionFactory = @MainActor (
         _ publishSnapshot: @escaping @MainActor (UsageSnapshot) -> Void
     ) async -> AccessoryUsageSession?
@@ -43,6 +45,7 @@ public final class AccessoryLifecycleCoordinator {
     }
 
     public func setCodexRunning(_ isRunning: Bool) {
+        logger.info("presence_received running=\(isRunning, privacy: .public) phase=\(String(describing: self.phase), privacy: .public)")
         if !isRunning, session != nil || phase == .starting {
             recycleRequired = true
         }
@@ -99,6 +102,7 @@ public final class AccessoryLifecycleCoordinator {
             guard !Task.isCancelled else { return }
 
             if desiredCodexPresence, session == nil {
+                logger.info("session_factory_started generation=\(self.generation, privacy: .public)")
                 recycleRequired = false
                 phase = .starting
                 generation += 1
@@ -126,6 +130,7 @@ public final class AccessoryLifecycleCoordinator {
                 guard let candidate else {
                     guard desiredCodexPresence, !Task.isCancelled else { return }
                     consecutiveStartFailures += 1
+                    logger.error("session_factory_unavailable retry=\(consecutiveStartFailures, privacy: .public)")
                     await retryDelay(consecutiveStartFailures)
                     guard desiredCodexPresence, !Task.isCancelled else {
                         phase = .idle
@@ -135,9 +140,11 @@ public final class AccessoryLifecycleCoordinator {
                 }
                 consecutiveStartFailures = 0
                 session = candidate
+                logger.info("session_start_requested generation=\(requestedGeneration, privacy: .public)")
                 await candidate.start()
                 guard desiredCodexPresence else { continue }
                 phase = .running
+                logger.info("session_running generation=\(requestedGeneration, privacy: .public)")
                 return
             }
 
@@ -150,6 +157,7 @@ public final class AccessoryLifecycleCoordinator {
                     store.snapshot = .unavailable
                     guard !Task.isCancelled else { return }
                     consecutiveCleanupFailures += 1
+                    logger.error("session_cleanup_failed retry=\(consecutiveCleanupFailures, privacy: .public)")
                     await retryDelay(consecutiveCleanupFailures)
                     continue
                 }
@@ -157,6 +165,7 @@ public final class AccessoryLifecycleCoordinator {
                 recycleRequired = false
                 consecutiveCleanupFailures = 0
                 phase = .idle
+                logger.info("session_cleanup_succeeded")
                 store.snapshot = .unavailable
                 if desiredCodexPresence { continue }
                 return
