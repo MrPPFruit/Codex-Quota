@@ -1,0 +1,21 @@
+state_version: 3
+workflow: full
+phase: verify
+delivery_outcome: complete
+build_mode: direct
+isolation: branch
+verify_mode: full
+design_doc: docs/comet/designs/2026-10-14-quota-session-liveness-design.md
+plan: null
+verify_result: pending
+verification_report: docs/comet/reports/2026-10-14-quota-session-liveness-verify.md
+verification_report_hash: null
+acceptance_digest: null
+verified_commit: null
+branch_status: pending
+verified_at: null
+archived: false
+handoff_context: openspec/changes/quota-session-liveness/.comet/handoff/design-context.json
+handoff_hash: 8cc98e2875bdf5dbe2858b277bd2fcd1eac6d3b393a23f8a1c1cf69932a68928
+build_command: npm run build:accessory
+verify_command: swift test --quiet && npm test && npm run verify:accessory && openspec validate quota-session-liveness --strict --no-interactive && git diff --check

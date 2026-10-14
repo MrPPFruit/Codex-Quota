@@ -136,6 +136,49 @@ import Testing
     #expect(monitor.isMonitoring == false)
 }
 
+@MainActor
+@Test func periodicPresenceReconciliationRecoversMissedChatGPTLaunchEvent() async throws {
+    let presenceSnapshot = LifecyclePresenceSnapshot()
+    var observedPresence: [Bool] = []
+    let monitor = SystemCodexPresenceMonitor(
+        refreshInterval: .milliseconds(10),
+        bundleIdentifiers: { presenceSnapshot.bundleIdentifiers }
+    )
+    let snapshot = UsageSnapshot(
+        fiveHour: .init(kind: .fiveHour, remainingPercent: nil, resetsAt: nil, freshness: .unavailable),
+        weekly: .init(kind: .weekly, remainingPercent: 94, resetsAt: nil, freshness: .fresh)
+    )
+    let client = LifecycleUsageClient(blocksClose: false, startSnapshot: snapshot)
+    let factory = LifecycleSessionFactory(clients: [client])
+    let store = UsageStore()
+    let coordinator = AccessoryLifecycleCoordinator(
+        store: store,
+        overlayController: OverlayController(
+            window: LifecycleOverlayWindowSpy(),
+            visibleFrames: { [CGRect(x: 0, y: 0, width: 800, height: 600)] },
+            startsMonitoring: false
+        ),
+        sessionFactory: { publish in factory.make(publish: publish) }
+    )
+    defer { monitor.stop() }
+
+    monitor.start { isRunning in
+        observedPresence.append(isRunning)
+        coordinator.setCodexRunning(isRunning)
+    }
+    #expect(observedPresence == [false])
+
+    // Simulate a missed NSWorkspace launch notification while the app is still running.
+    presenceSnapshot.bundleIdentifiers = ["com.openai.codex"]
+    try await eventuallyLifecycle {
+        observedPresence.contains(true) && factory.createdCount == 1 && coordinator.phase == .running
+    }
+    try await eventuallyLifecycle { store.snapshot.weekly.remainingPercent == 94 }
+
+    #expect(store.snapshot.fiveHour.remainingPercent == nil)
+    try await coordinator.shutdownForQuit()
+}
+
 @Test func overlayVisibilityDefaultsOnAndPersistsOptOut() throws {
     let defaults = makeLifecycleDefaults()
     let store = UserDefaultsOverlayVisibilityStore(defaults: defaults)
@@ -474,6 +517,11 @@ private final class LifecycleOverlayWindowSpy: OverlayWindowControlling {
 }
 
 @MainActor
+private final class LifecyclePresenceSnapshot {
+    var bundleIdentifiers: [String?] = []
+}
+
+@MainActor
 private final class LifecycleMonitoringSpy: OverlayMonitoring {
     private(set) var cancelCount = 0
     func cancel() { cancelCount += 1 }
@@ -492,14 +540,16 @@ private final class LifecycleMonitoringFactory {
 private actor LifecycleUsageClient: UsageStreamingClient {
     private let blocksClose: Bool
     private var closeFailures: Int
+    private let startSnapshot: UsageSnapshot
     private var continuation: AsyncStream<UsageSnapshot>.Continuation?
     private var closeGate: CheckedContinuation<Void, Never>?
     private(set) var closeEntered = false
     private(set) var closeCount = 0
 
-    init(blocksClose: Bool, closeFailures: Int = 0) {
+    init(blocksClose: Bool, closeFailures: Int = 0, startSnapshot: UsageSnapshot = .unavailable) {
         self.blocksClose = blocksClose
         self.closeFailures = closeFailures
+        self.startSnapshot = startSnapshot
     }
 
     func snapshots() -> AsyncStream<UsageSnapshot> {
@@ -509,7 +559,7 @@ private actor LifecycleUsageClient: UsageStreamingClient {
         }
     }
 
-    func start() async throws -> UsageSnapshot { .unavailable }
+    func start() async throws -> UsageSnapshot { startSnapshot }
     func reconnect() async throws -> UsageSnapshot { .unavailable }
 
     func close() async throws {

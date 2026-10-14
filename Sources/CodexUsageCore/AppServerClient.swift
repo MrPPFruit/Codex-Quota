@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 public enum AppServerTransportTermination: Sendable, Equatable {
     case exited
@@ -195,6 +196,7 @@ enum ChildProcessTerminator {
 }
 
 public actor AppServerClient: UsageStreamingClient {
+    private let logger = Logger(subsystem: "com.ppfruit.codex-quota", category: "app-server")
     private enum Lifecycle {
         case idle
         case connecting(Task<UsageSnapshot, Error>)
@@ -338,6 +340,7 @@ public actor AppServerClient: UsageStreamingClient {
     }
 
     private func connect() async throws -> UsageSnapshot {
+        logger.info("connection_started")
         if let closeBarrier {
             try await closeBarrier.value
             self.closeBarrier = nil
@@ -357,22 +360,29 @@ public actor AppServerClient: UsageStreamingClient {
         }
         defer { deadlineTask.cancel() }
         do {
+            logger.debug("transport_start_started")
             try await startTransport(generation: connectionGeneration, deadline: operationDeadline)
+            logger.info("transport_started")
+            logger.debug("initialize_started")
             _ = try await request("initialize", params: ["clientInfo": .object([
                 "name": .string("codex-quota"),
                 "title": .string("Codex Quota"),
                 "version": .string("0.1.1"),
             ])], generation: connectionGeneration)
+            logger.info("initialize_succeeded")
             try await notify("initialized", params: [:], generation: connectionGeneration)
+            logger.debug("initial_rate_limit_read_started")
             let result = try await request("account/rateLimits/read", params: [:], generation: connectionGeneration)
             guard let limits = result.object?["rateLimits"], let payload = Self.parsePayload(limits) else { throw AppServerClientError.protocolFailure }
             guard connectionGeneration == generation, !closed else { throw AppServerClientError.closed }
             currentPayload = payload
             publish(UsageNormalizer.normalize(payload))
             connected = true
+            logger.info("initial_rate_limit_read_succeeded")
             startCalibrationLoop(generation: connectionGeneration)
             return currentSnapshot
         } catch {
+            logger.error("connection_failed category=\(Self.diagnosticCategory(error), privacy: .public)")
             try? await invalidate(expectedGeneration: connectionGeneration, closeTransport: true)
             if let known = error as? AppServerClientError { throw known }
             throw AppServerClientError.transportFailure
@@ -477,18 +487,22 @@ public actor AppServerClient: UsageStreamingClient {
         }
         defer { deadlineTask.cancel() }
         do {
+            logger.debug("refresh_rate_limit_read_started")
             let result = try await request("account/rateLimits/read", params: [:], generation: generation)
             guard generation == self.generation, !closed, let limits = result.object?["rateLimits"], let payload = Self.parsePayload(limits) else { return }
             currentPayload = payload
             publish(UsageNormalizer.normalize(payload))
             connected = true
+            logger.info("refresh_rate_limit_read_succeeded")
         } catch {
+            logger.error("refresh_rate_limit_read_failed category=\(Self.diagnosticCategory(error), privacy: .public)")
             try? await invalidate(expectedGeneration: generation, closeTransport: true)
         }
     }
 
     private func terminated(_ reason: AppServerTransportTermination, generation: Int) async {
         guard generation == self.generation, !closed else { return }
+        logger.error("transport_terminated reason=\(reason == .exited ? "exited" : "read_failed", privacy: .public)")
         try? await invalidate(expectedGeneration: generation, closeTransport: true)
     }
 
@@ -542,6 +556,18 @@ public actor AppServerClient: UsageStreamingClient {
         guard currentSnapshot != snapshot else { return }
         currentSnapshot = snapshot
         snapshotContinuations.values.forEach { $0.yield(snapshot) }
+    }
+
+    private static func diagnosticCategory(_ error: Error) -> String {
+        guard let error = error as? AppServerClientError else { return "unexpected" }
+        return switch error {
+        case .closed: "closed"
+        case .deadlineExceeded: "deadline_exceeded"
+        case .transportFailure: "transport_failure"
+        case .protocolFailure: "protocol_failure"
+        case .frameTooLarge: "frame_too_large"
+        case .cleanupFailure: "cleanup_failure"
+        }
     }
 
     private func removeSnapshotContinuation(_ id: UUID) {
