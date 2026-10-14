@@ -60,24 +60,26 @@ public final class AccessoryLifecycleCoordinator {
         desiredCodexPresence = false
         overlayController.setLifecycleAvailable(false)
         store.snapshot = .unavailable
-        if phase == .starting { reconcileTask?.cancel() }
-        if phase == .degraded {
-            guard let session else { phase = .idle; return }
-            phase = .stopping
-            do { try await session.shutdown() }
-            catch { phase = .degraded; throw error }
-            self.session = nil
-            generation += 1
+        reconcileTask?.cancel()
+        await reconcileTask?.value
+        reconcileTask = nil
+
+        guard let session else {
             phase = .idle
             return
         }
-        scheduleReconcile()
-        await reconcileTask?.value
-        if phase == .degraded { throw AppServerClientError.cleanupFailure }
+
+        phase = .stopping
+        do { try await session.shutdown() }
+        catch { phase = .degraded; throw error }
+        self.session = nil
+        recycleRequired = false
+        generation += 1
+        phase = .idle
     }
 
     private func scheduleReconcile() {
-        guard reconcileTask == nil, phase != .degraded else { return }
+        guard reconcileTask == nil else { return }
         reconcileTask = Task { @MainActor [weak self] in
             guard let self else { return }
             await self.drainDesiredState()
@@ -92,7 +94,10 @@ public final class AccessoryLifecycleCoordinator {
 
     private func drainDesiredState() async {
         var consecutiveStartFailures = 0
+        var consecutiveCleanupFailures = 0
         while true {
+            guard !Task.isCancelled else { return }
+
             if desiredCodexPresence, session == nil {
                 recycleRequired = false
                 phase = .starting
@@ -136,17 +141,21 @@ public final class AccessoryLifecycleCoordinator {
                 return
             }
 
-            if (!desiredCodexPresence || recycleRequired), let activeSession = session {
+            if (!desiredCodexPresence || recycleRequired || phase == .degraded), let activeSession = session {
                 phase = .stopping
                 generation += 1
                 do { try await activeSession.shutdown() }
                 catch {
                     phase = .degraded
                     store.snapshot = .unavailable
-                    return
+                    guard !Task.isCancelled else { return }
+                    consecutiveCleanupFailures += 1
+                    await retryDelay(consecutiveCleanupFailures)
+                    continue
                 }
                 session = nil
                 recycleRequired = false
+                consecutiveCleanupFailures = 0
                 phase = .idle
                 store.snapshot = .unavailable
                 if desiredCodexPresence { continue }

@@ -1,0 +1,18 @@
+state_version: 3
+workflow: hotfix
+phase: verify
+delivery_outcome: complete
+build_mode: direct
+isolation: branch
+verify_mode: full
+design_doc: null
+plan: null
+verify_result: pending
+verification_report: docs/comet/reports/2026-10-14-retry-lifecycle-after-cleanup-failure-verify.md
+verification_report_hash: null
+acceptance_digest: null
+verified_commit: null
+branch_status: pending
+verified_at: null
+archived: false
+build_command: npm run build:accessory
