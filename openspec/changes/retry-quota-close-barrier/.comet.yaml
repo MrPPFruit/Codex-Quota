@@ -1,0 +1,17 @@
+state_version: 3
+workflow: hotfix
+phase: build
+delivery_outcome: pending
+build_mode: direct
+isolation: branch
+verify_mode: light
+design_doc: null
+plan: null
+verify_result: pending
+verification_report: null
+verification_report_hash: null
+acceptance_digest: null
+verified_commit: null
+branch_status: pending
+verified_at: null
+archived: false
