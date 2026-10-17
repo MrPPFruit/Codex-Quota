@@ -485,6 +485,41 @@ struct AppServerClientTests {
         #expect(await transport.closeCount == 2)
     }
 
+    @Test("transport 清理连续失败后保留旧连接并可自动恢复")
+    func transportCleanupFailuresCanRetryBeforeReplacement() async throws {
+        let oldTransport = FakeAppServerTransport()
+        let replacement = FakeAppServerTransport()
+        let factory = TransportSequence([oldTransport, replacement])
+        let client = AppServerClient(
+            executable: executable,
+            transportFactory: { factory.next() },
+            deadline: .seconds(1)
+        )
+        let initial = Task { try await client.start() }
+        try await completeHandshake(transport: oldTransport)
+        _ = try await initial.value
+
+        await oldTransport.setCloseFailures(2)
+        await oldTransport.disconnect()
+        try await eventually { await oldTransport.closeCount == 1 }
+        try await Task.sleep(for: .milliseconds(20))
+
+        let failedReconnect = Task { try await client.reconnect() }
+        await #expect(throws: AppServerClientError.cleanupFailure) { try await failedReconnect.value }
+        #expect(await oldTransport.closeCount == 2)
+        #expect(await replacement.starts.isEmpty)
+
+        let recovered = Task { try await client.reconnect() }
+        try await eventually { await oldTransport.closeCount == 3 }
+        try await eventually { await replacement.requestIDs().count == 1 }
+        #expect(await replacement.starts.count == 1)
+        await replacement.emit(Fixtures.response(id: await replacement.requestIDs()[0], rateLimits: "{}"))
+        try await eventually { await replacement.requestIDs().count == 2 }
+        await replacement.emit(Fixtures.response(id: await replacement.requestIDs()[1], rateLimits: Fixtures.snapshotJSON))
+        #expect(try await recovered.value.fiveHour.remainingPercent == 80)
+        try await client.close()
+    }
+
     @Test("factory 返回同一强持有 transport 时由实例自身拒绝二次 start")
     func reusedTransportRejectsSecondStart() async throws {
         let (client, _) = try await connectedClient()
