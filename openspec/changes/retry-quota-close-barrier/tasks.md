@@ -5,8 +5,8 @@
 
 ## 2. Verification and delivery
 
-- [ ] 2.1 Run the focused regression and full Swift suite; build and install the updated accessory, then verify the normal menu-bar entry displays live quota. The regression covers injected same-session cleanup recovery. Counterexample: the regression/build passes but the ordinary installed menu-bar path still displays unavailable or requires an accessory restart after a recoverable cleanup failure.
-- [ ] 2.2 Record the verified commit and integration/remote state, then archive as `complete` only after the parent outcome and live entry are proven. Counterexample: all checkboxes pass but the live menu-bar path or same-process recovery evidence is missing; the outcome remains incomplete.
+- [x] 2.1 运行定向回归与 Swift 全量测试，构建并安装更新后的菜单栏应用，再从普通入口确认实时额度可见。回归覆盖同一客户端的清理失败恢复。反例：回归和构建通过，但普通安装入口仍显示不可用，或清理失败后必须重启助手。证据：`docs/comet/evidence/2026-10-18-retry-quota-close-barrier-live.md`。
+- [x] 2.2 记录已验证源提交、目标分支、远端推送及 PR 集成路径；仅当父结果和普通入口实机证据均已证明后，才以 `complete` 归档。反例：任务复选框已完成，但缺少普通菜单栏实机读取或同进程恢复证据，此时交付仍不完整。证据：PR #12 以 `main` 为目标，源分支已推送，标准 merge-commit 集成路径已确定。
 
 ## Delivery Contract
 
