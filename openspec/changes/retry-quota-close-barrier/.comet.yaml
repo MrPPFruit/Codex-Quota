@@ -15,3 +15,4 @@ verified_commit: null
 branch_status: handled
 verified_at: null
 archived: false
+verify_command: swift test --quiet && npm test && npm run verify:accessory && openspec validate retry-quota-close-barrier --strict --no-interactive && git diff --check

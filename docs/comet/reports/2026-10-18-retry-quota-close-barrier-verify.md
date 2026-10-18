@@ -16,6 +16,7 @@
 - `npm test`：27 项通过；本次 change 之前已完成全量运行。
 - `npm run verify:accessory`：release build 与 accessory present/absent smoke 通过；本次 change 之前已完成。
 - `openspec validate retry-quota-close-barrier --strict`：通过；`git diff --check`：通过。
+- Comet change 显式配置了本仓库的验证命令；此前通用回退尝试不存在的 `npm run build`，因此没有被当作项目验证通过。
 - 安装验证：`/Applications/Codex Quota.app` 的 executable SHA-256 与 release build 一致，bundle ID 为 `com.ppfruit.codex-quota`；进程启动后可访问菜单栏状态，并运行 app-server 子进程。
 
 ## Counterexample 检查
