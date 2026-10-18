@@ -272,7 +272,14 @@ public actor AppServerClient: UsageStreamingClient {
         guard !closed else { throw AppServerClientError.closed }
         switch lifecycle {
         case let .connecting(task): _ = try? await task.value
-        case let .closing(task): try await task.value
+        case let .closing(task):
+            do { try await task.value }
+            catch {
+                if case .closing = lifecycle { lifecycle = .idle }
+                throw error
+            }
+            if case .closing = lifecycle { lifecycle = .idle }
+            return try await startOrJoin()
         case .idle, .connected: break
         }
         if case .connected = lifecycle {
@@ -280,15 +287,18 @@ public actor AppServerClient: UsageStreamingClient {
             let closeTask = Task {
                 try await self.invalidate(
                     expectedGeneration: connectionGeneration,
-                    closeTransport: true,
-                    waitForClose: true
+                    closeTransport: true
                 )
             }
             lifecycle = .closing(closeTask)
-            try await closeTask.value
-            lifecycle = .idle
+            do { try await closeTask.value }
+            catch {
+                lifecycle = .idle
+                throw error
+            }
+            if case .closing = lifecycle { lifecycle = .idle }
         } else if transportStarted {
-            try await invalidate(expectedGeneration: generation, closeTransport: true, waitForClose: true)
+            try await invalidate(expectedGeneration: generation, closeTransport: true)
         }
         return try await startOrJoin()
     }
@@ -302,8 +312,7 @@ public actor AppServerClient: UsageStreamingClient {
             defer { self.finishSnapshotStreams() }
             try await self.invalidate(
                 expectedGeneration: connectionGeneration,
-                closeTransport: true,
-                waitForClose: true
+                closeTransport: true
             )
         }
         terminalCloseTask = closeTask
@@ -322,8 +331,12 @@ public actor AppServerClient: UsageStreamingClient {
         case .connected: return currentSnapshot
         case let .connecting(task): return try await task.value
         case let .closing(task):
-            try await task.value
-            lifecycle = .idle
+            do { try await task.value }
+            catch {
+                if case .closing = lifecycle { lifecycle = .idle }
+                throw error
+            }
+            if case .closing = lifecycle { lifecycle = .idle }
             return try await startOrJoin()
         case .idle:
             let task = Task { try await self.connect() }
@@ -517,7 +530,6 @@ public actor AppServerClient: UsageStreamingClient {
     private func invalidate(
         expectedGeneration: Int,
         closeTransport: Bool,
-        waitForClose: Bool = false,
         failure: AppServerClientError = .transportFailure
     ) async throws {
         guard expectedGeneration == generation else { return }
@@ -538,16 +550,17 @@ public actor AppServerClient: UsageStreamingClient {
             let closeDeadline = ContinuousClock().now.advanced(by: .seconds(1))
             let barrier = Task { if let closingTransport { try await closingTransport.close(deadline: closeDeadline) } }
             closeBarrier = barrier
-            if waitForClose {
-                do {
-                    try await barrier.value
-                    closeBarrier = nil
-                } catch {
-                    transport = closingTransport
-                    transportStarted = closingTransport != nil
-                    closeBarrier = nil
-                    throw error
-                }
+            logger.info("transport_cleanup_started")
+            do {
+                try await barrier.value
+                closeBarrier = nil
+                logger.info("transport_cleanup_succeeded")
+            } catch {
+                transport = closingTransport
+                transportStarted = closingTransport != nil
+                closeBarrier = nil
+                logger.error("transport_cleanup_failed category=\(Self.diagnosticCategory(error), privacy: .public)")
+                throw error
             }
         }
     }
