@@ -4,7 +4,7 @@
 定义额度小程序在 ChatGPT 启停或 session 清理失败时，对 app-server 用量会话的持有、关闭、重试与替换规则。
 ## Requirements
 ### Requirement: 清理失败后会话仍可恢复
-额度小程序 MUST 在 session 关闭失败时继续持有该 session、保持额度状态为不可用，并按有界退避重试关闭。只有旧 session 确认关闭成功后，系统 MUST 才能创建或启动替代 session。系统 MUST 自动继续 reconcile，无需用户重启额度小程序。
+额度小程序 MUST 在 session 或其 app-server transport 关闭失败时继续持有旧 session/transport，保持额度状态为不可用，并按有界退避重试关闭。只有旧 session 和 transport 均确认关闭成功后，系统 MUST 才能创建或启动替代 session/transport。系统 MUST 自动继续 reconcile，无需用户重启额度小程序。
 
 #### Scenario: ChatGPT 运行时的一次性清理失败恢复
 - **WHEN** 当前 session 关闭失败一次，且 ChatGPT 仍在运行或随后重新运行
@@ -17,6 +17,10 @@
 #### Scenario: 用户在清理重试期间退出
 - **WHEN** 用户在清理重试等待期间退出额度小程序
 - **THEN** 小程序 MUST 取消并等待后台 reconcile，然后串行执行最后一次 session 关闭尝试
+
+#### Scenario: app-server transport 清理连续失败后恢复
+- **WHEN** app-server transport 关闭连续失败，随后旧 transport 成功关闭，且 ChatGPT 仍在运行
+- **THEN** 小程序 MUST 保留旧 transport 并按有界退避重试关闭；确认旧 transport 关闭前 MUST NOT 启动替代 transport；关闭成功后 MUST 在不重启额度小程序的情况下恢复额度读取，并记录脱敏的清理阶段和错误类别
 
 ### Requirement: ChatGPT presence 与额度会话持续收敛
 

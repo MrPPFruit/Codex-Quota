@@ -1,18 +1,18 @@
 state_version: 3
 workflow: hotfix
-phase: verify
+phase: archive
 delivery_outcome: complete
 build_mode: direct
 isolation: branch
 verify_mode: light
 design_doc: null
 plan: null
-verify_result: pending
+verify_result: pass
 verification_report: docs/comet/reports/2026-10-18-retry-quota-close-barrier-verify.md
-verification_report_hash: null
-acceptance_digest: null
-verified_commit: null
+verification_report_hash: ec089c02324f8260d1f39967d80eab76b8a59321910c0d96f1474a1cbcc2686a
+acceptance_digest: 71843adc949bfa7846af914cc2bf2aca70b45cbf8d12dd009be9588b9c3263b5
+verified_commit: af35246c57628db57f4e78e1b8f22200e8f0d568
 branch_status: handled
-verified_at: null
-archived: false
+verified_at: 2026-10-18
+archived: true
 verify_command: swift test --quiet && npm test && npm run verify:accessory && openspec validate retry-quota-close-barrier --strict --no-interactive && git diff --check
