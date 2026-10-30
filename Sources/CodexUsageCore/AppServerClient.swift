@@ -408,7 +408,8 @@ public actor AppServerClient: UsageStreamingClient {
         do {
             try await transport.start(
                 executable: executable,
-                arguments: ["app-server", "--stdio"],
+                // 额度辅助进程不能刷新共享插件缓存，否则 Git 元数据变化会使正常聊天的钩子授权失效。
+                arguments: ["app-server", "--stdio", "--disable", "plugins"],
                 onData: { [weak self] data in Task { await self?.receive(data, generation: generation) } },
                 onTermination: { [weak self] reason in Task { await self?.terminated(reason, generation: generation) } },
                 deadline: deadline
