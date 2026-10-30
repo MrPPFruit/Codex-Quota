@@ -85,7 +85,7 @@ struct AppServerClientTests {
         await transport.emit(Fixtures.response(id: readID, rateLimits: Fixtures.snapshotJSON))
         #expect(try await started.value == UsageNormalizer.normalize(Fixtures.snapshot))
         let starts = await transport.starts
-        #expect(starts.first?.1 == ["app-server", "--stdio"])
+        #expect(starts.first?.1 == ["app-server", "--stdio", "--disable", "plugins"])
         try await client.close()
     }
 
